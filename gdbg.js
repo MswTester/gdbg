@@ -2,6 +2,7 @@
 
 // Configuration and state management
 const CONFIG = {
+    version: "0.3.0",
     pageSize: 10,        // Number of items to display per page
     scanInterval: 200,   // Memory scan interval (ms)
     defaultScanType: 'int',
@@ -105,7 +106,7 @@ const log = {
         }
 
         // Simplified output for all environments
-        items.forEach(item => console.log(formatter(item)));
+        items.forEach((item, idx) => console.log(formatter(item, idx)));
     }
 };
 
@@ -135,19 +136,19 @@ global.help = function(cmd) {
     if (!cmd) {
         log.info('Available commands:');
         console.log('  help([command])         - Display help information');
-        console.log('  list.class([pattern])   - List Java classes');
-        console.log('  list.method(class, [pattern]) - List methods of a class');
-        console.log('  list.module([pattern])  - List loaded modules');
-        console.log('  list.export(module, [pattern]) - List exports of a module');
-        console.log('  hook.method(index)      - Hook Java method');
-        console.log('  hook.native(index)      - Hook native function');
-        console.log('  scan.type(value, [type], [prot]) - Scan memory');
-        console.log('  scan.next(condFn, [type]) - Filter results by condition');
-        console.log('  mem.read/write/lock/unlock/trace - Memory operations');
-        console.log('  nxt([offset], [count])  - Navigate through logs');
+        console.log('  clss([pattern])         - List Java classes');
+        console.log('  meths(class, [pattern]) - List methods of a class');
+        console.log('  modls([pattern])        - List loaded modules');
+        console.log('  exps(module, [pattern]) - List exports of a module');
+        console.log('  hookm(index)            - Hook Java method');
+        console.log('  hookn(index)            - Hook native function');
+        console.log('  srch(value, [type], [prot]) - Scan memory');
+        console.log('  exct(condFn, [type])    - Filter results by condition');
+        console.log('  nxt([offset], [count])  - Navigate next logs');
+        console.log('  prv([offset])           - Navigate previous logs');
         console.log('  sort()                  - Sort current logs');
-        console.log('  hist.save/list/load/clear - History management');
-        console.log('  config                  - View/change settings');
+        console.log('  sav([index])            - Save the value from logs to library');
+        console.log('  ls([index], [count])    - Display library values');
         return;
     }
 
@@ -179,7 +180,7 @@ global.help = function(cmd) {
     }
 };
 
-global.nxt = function (o = 0, s = CONFIG.pageSize) {
+global.nxt = function (o = CONFIG.pageSize, s = CONFIG.pageSize) {
     state.logIndex += o;
     if (state.logIndex < 0) state.logIndex = 0;
     if (state.logIndex >= state.logs.length) state.logIndex = Math.max(0, state.logs.length - s);
@@ -196,7 +197,7 @@ global.nxt = function (o = 0, s = CONFIG.pageSize) {
     items.forEach(l => console.log(`[${l.index}] ${l.label}`));
 };
 
-global.prev = function(s = CONFIG.pageSize) {
+global.prv = function(s = CONFIG.pageSize) {
     nxt(-s, s);
 };
 
@@ -205,11 +206,6 @@ global.sav = function (i) {
     if (!l) return log.error(`sav(): Invalid logs index ${i}`);
     state.lib.push({ ...l });
     log.success(`Saved as lib[${state.lib.length - 1}]`);
-};
-
-global.ls = function () {
-    if(!state.lib.length) return log.error("ls(): No values in lib");
-    log.table(state.lib, item => `[${item.index}] ${item.label} (${item.type})`);
 };
 
 global.sort = function () {
@@ -332,7 +328,7 @@ global.list = {
             mods.forEach((m, i) =>
                 state.logs.push({
                     index: i,
-                    label: `${utils.formatAddress(m.base)} | ${m.name}`,
+                    label: `${utils.formatAddress(m.base)} | ${m.name} (${m.size}B)`,
                     value: { name: m.name, base: m.base, size: m.size },
                     type: 'module'
                 })
@@ -405,8 +401,15 @@ global.hook = {
             Interceptor.attach(v.address, {
                 onEnter(args) {
                     log.success(`${v.name} called`);
-                    for (let i = 0; i < 5; i++) 
-                        console.log(`  arg${i}: ${utils.formatAddress(args[i])}`);
+                    let i = 0;
+                    while (i <= 5) {
+                        try {
+                            console.log(`  arg${i}: ${utils.formatAddress(args[i])} | ${args[i].toUInt32()}`);
+                            i++;
+                        } catch (e) {
+                            break;
+                        }
+                    }
                 },
                 onLeave(r) {
                     console.log(`  → Return: ${utils.formatAddress(r)}`);
@@ -528,10 +531,10 @@ global.scan = {
 };
 
 global.mem = {
-    read(i, t) {
+    read(i, t = "int") {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.read(): Invalid pointer @ ${i}`);
-        const addr = v.address, type = t || v.type;
+        const addr = v.address || v, type = t || v.type;
         
         try {
             const val = memory.reader[type](addr);
@@ -545,7 +548,7 @@ global.mem = {
     write(i, val, t) {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.write(): Invalid pointer @ ${i}`);
-        const addr = v.address, type = t || v.type;
+        const addr = v.address || v, type = t || v.type;
         
         try {
             const oldVal = memory.reader[type](addr);
@@ -559,7 +562,7 @@ global.mem = {
     lock(i, val, t) {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.lock(): Invalid pointer @ ${i}`);
-        const addr = v.address, type = t || v.type;
+        const addr = v.address || v, type = t || v.type;
         
         try {
             const id = setInterval(() => {
@@ -596,7 +599,7 @@ global.mem = {
     trace(i, t) {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.trace(): Invalid pointer @ ${i}`);
-        const addr = v.address, type = t || v.type;
+        const addr = v.address || v, type = t || v.type;
         
         try {
             Interceptor.attach(addr, {
@@ -618,7 +621,7 @@ global.mem = {
         if (!v) return log.error(`mem.watch(): Invalid pointer @ ${i}`);
         if (typeof callback !== 'function') return log.error('mem.watch(): Callback function required');
         
-        const addr = v.address, type = t || v.type;
+        const addr = v.address || v, type = t || v.type;
         let lastVal;
         
         try {
@@ -721,8 +724,11 @@ global.cmd = {
         
         global[name] = function(...args) {
             // Insert arguments into command string
-            const cmd = command.replace(/\$(\d+)/g, (_, i) => 
-                args[parseInt(i, 10)] !== undefined ? args[parseInt(i, 10)] : _);
+            const cmd = command.replace(/\$(\d+)/g, (_, i) => {
+                const arg = args[parseInt(i, 10)];
+                if (arg === undefined) return _;
+                return typeof arg === 'string' ? `"${arg}"` : arg;
+            });
             
             try {
                 return eval(cmd);
@@ -751,9 +757,9 @@ global.cmd = {
 // Detect environment
 (function detectEnvironment() {
     try {
-        if (typeof ObjC !== 'undefined') {
+        if (ObjC.available) {
             log.info('iOS environment detected');
-        } else if (typeof Java !== 'undefined') {
+        } else if (Java.available) {
             log.info('Android environment detected');
         }
     } catch (_) {
@@ -761,19 +767,206 @@ global.cmd = {
     }
 })();
 
-// Pre-defined useful aliases
-cmd.alias('find', 'list.class($0)');
-cmd.alias('methods', 'list.method($0)');
-cmd.alias('mods', 'list.module($0)');
-cmd.alias('exports', 'list.export($0, $1)');
-cmd.alias('search', 'scan.type($0, $1)');
-cmd.alias('exact', 'scan.value($0, $1)');
-cmd.alias('hookm', 'hook.method($0)');
-cmd.alias('hookn', 'hook.native($0)');
-cmd.alias('r', 'mem.read($0, $1)');
-cmd.alias('w', 'mem.write($0, $1, $2)');
-cmd.alias('l', 'mem.lock($0, $1, $2)');
-cmd.alias('ul', 'mem.unlock($0)');
+// Enhanced library management
+global.lib = {
+    // Save current log item to library
+    save: global.sav,
+    
+    // List library items with pagination
+    list(page = 0, size = CONFIG.pageSize) {
+        if(!state.lib.length) return log.error("ls(): No values in lib");
+        
+        const start = page * size;
+        const end = Math.min(start + size, state.lib.length);
+        
+        if (start >= state.lib.length) {
+            return log.error(`ls(): Page ${page} exceeds available items (total: ${state.lib.length})`);
+        }
+        
+        log.info(`Library items ${start}-${end-1} / ${state.lib.length}`);
+        const items = state.lib.slice(start, end);
+        
+        log.table(items, (item, idx) => 
+            `[${start + idx}] ${item.label} (${item.type})`
+        );
+        
+        if (end < state.lib.length) {
+            log.info(`Use ls(${page + 1}) to see the next page`);
+        }
+    },
+    
+    // Clear all library items
+    clear() {
+        if (!state.lib.length) return log.info("Library is already empty");
+        const count = state.lib.length;
+        state.lib.length = 0;
+        log.success(`Cleared ${count} items from library`);
+    },
+    
+    // Remove an item by index
+    remove(idx) {
+        if (idx < 0 || idx >= state.lib.length) {
+            return log.error(`lib.remove(): Invalid index ${idx}`);
+        }
+        
+        const removed = state.lib.splice(idx, 1)[0];
+        log.success(`Removed lib[${idx}]: ${removed.label}`);
+        
+        // Reindex remaining items
+        state.lib.forEach((item, i) => {
+            if (item.index !== undefined) item.index = i;
+        });
+    },
+    
+    // Move an item from one index to another
+    move(fromIdx, toIdx) {
+        if (fromIdx < 0 || fromIdx >= state.lib.length) {
+            return log.error(`lib.move(): Invalid source index ${fromIdx}`);
+        }
+        
+        if (toIdx < 0 || toIdx >= state.lib.length) {
+            return log.error(`lib.move(): Invalid target index ${toIdx}`);
+        }
+        
+        if (fromIdx === toIdx) {
+            return log.info(`Item is already at index ${fromIdx}`);
+        }
+        
+        // Get item to move
+        const item = state.lib[fromIdx];
+        
+        // Remove the item
+        state.lib.splice(fromIdx, 1);
+        
+        // Insert at new position
+        state.lib.splice(toIdx, 0, item);
+        
+        // Reindex all items
+        state.lib.forEach((item, i) => {
+            if (item.index !== undefined) item.index = i;
+        });
+        
+        log.success(`Moved item from lib[${fromIdx}] to lib[${toIdx}]`);
+    },
+    
+    // Sort library items by specific field
+    sort(field = 'label') {
+        if (!state.lib.length) return log.error("lib.sort(): Library is empty");
+        
+        try {
+            const sorted = [...state.lib];
+            
+            if (field === 'label' || field === 'type') {
+                sorted.sort((a, b) => a[field].localeCompare(b[field]));
+            } else if (field === 'index') {
+                sorted.sort((a, b) => (a.index || 0) - (b.index || 0));
+            } else if (field === 'address' && sorted[0]?.value?.address) {
+                sorted.sort((a, b) => a.value.address.toString().localeCompare(b.value.address.toString()));
+            } else {
+                return log.error(`lib.sort(): Unsupported field "${field}"`);
+            }
+            
+            state.lib = sorted;
+            
+            // Reindex all items
+            state.lib.forEach((item, i) => {
+                if (item.index !== undefined) item.index = i;
+            });
+            
+            log.success(`Sorted library by ${field}`);
+            ls();
+        } catch (e) {
+            log.error(`lib.sort() failed: ${e}`);
+        }
+    },
+    
+    // Find items in library matching a pattern
+    find(pattern, field = 'label') {
+        if (!state.lib.length) return log.error("lib.find(): Library is empty");
+        
+        if (typeof pattern === 'string') {
+            pattern = pattern.toLowerCase();
+        }
+        
+        const results = state.lib.filter(item => {
+            if (field === 'label' || field === 'type') {
+                return item[field].toLowerCase().includes(pattern);
+            } else if (field === 'index') {
+                return item.index === pattern;
+            } else if (field === 'address' && item.value?.address) {
+                return item.value.address.toString().includes(pattern);
+            }
+            return false;
+        });
+        
+        if (!results.length) {
+            return log.info(`No matches found for "${pattern}" in ${field}`);
+        }
+        
+        log.success(`Found ${results.length} matches:`);
+        log.table(results, (item, idx) => 
+            `[${state.lib.indexOf(item)}] ${item.label} (${item.type})`
+        );
+        
+        return results;
+    },
+    
+    // Export item from library to log
+    export(idx) {
+        if (idx < 0 || idx >= state.lib.length) {
+            return log.error(`lib.export(): Invalid index ${idx}`);
+        }
+        
+        const item = state.lib[idx];
+        state.logs.push({ ...item, index: state.logs.length });
+        log.success(`Exported lib[${idx}] to logs[${state.logs.length - 1}]`);
+        return state.logs.length - 1;
+    },
+    
+    // Create a copy of an item
+    duplicate(idx) {
+        if (idx < 0 || idx >= state.lib.length) {
+            return log.error(`lib.duplicate(): Invalid index ${idx}`);
+        }
+        
+        const item = state.lib[idx];
+        state.lib.push({ ...item });
+        log.success(`Duplicated lib[${idx}] to lib[${state.lib.length - 1}]`);
+        return state.lib.length - 1;
+    }
+};
+
+// Alias for shorthand usage
+global.clss = global.list.class.bind(global.list);
+global.meths = global.list.method.bind(global.list);
+global.modls = global.list.module.bind(global.list);
+global.exps = global.list.export.bind(global.list);
+global.hookm = global.hook.method.bind(global.hook);
+global.hookn = global.hook.native.bind(global.hook);
+global.srch = global.scan.type.bind(global.scan);
+global.exct = global.scan.value.bind(global.scan);
+global.ls = global.lib.list.bind(global.lib);
+global.mv = global.lib.move.bind(global.lib);
+global.rm = global.lib.remove.bind(global.lib);
+global.r = global.mem.read.bind(global.mem);
+global.w = global.mem.write.bind(global.mem);
+global.l = global.mem.lock.bind(global.mem);
+global.ul = global.mem.unlock.bind(global.mem);
 
 // Initial info message
+console.log(`
+        _____ _____  ____   _____ 
+       / ____|  __ \\|  _ \\ / ____|
+      | |  __| |  | | |_) | |  __ 
+      | | |_ | |  | |  _ <| | |_ |
+      | |__| | |__| | |_) | |__| |
+       \\_____|_____/|____/ \\_____|
+`);
+console.log(`
+===========================================
+    Game Debugger & Memory Tool v${CONFIG.version}
+          Created by @MswTester
+===========================================
+`);
+
 log.info('gdbg.js loaded. Type help() to see available commands.');
