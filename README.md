@@ -9,18 +9,22 @@ A powerful, lightweight memory debugging and analysis toolkit for game hacking a
   - Monitoring and locking memory values
   - Incremental scanning (decreased/increased values)
   - Memory tracing
+  - Hexadecimal and type-specific memory view
 
 - **Java method and native function inspection**
   - List and search for loaded Java classes
   - Enumerate methods of classes
   - List modules and exports
   - Hook Java methods and native functions
+  - Unhook methods and functions
+  - Call native functions and Java methods directly
 
 - **Rich command interface**
   - Command history and aliases
   - Color-coded output
   - Pagination for large results
   - Intuitive shorthand commands
+  - Filter logs with grep-like regex search
 
 - **Library and history management**
   - Save, organize, and manage important memory addresses
@@ -99,10 +103,15 @@ After loading the script, you can:
    ls()    // List library items
    ```
 
-9. Get help on a specific command:
+9. Filter logs using regex pattern:
    ```javascript
-   help("scan.type")
+   grep("player")  // Find all entries containing "player"
    ```
+
+10. Get help on a specific command:
+    ```javascript
+    help("scan.type")
+    ```
 
 ## Command Reference
 
@@ -110,6 +119,7 @@ After loading the script, you can:
 - `nxt([offset], [count])` - Navigate forward through logs
 - `prv([count])` - Navigate backward through logs
 - `sort()` - Sort current logs
+- `grep(pattern, [options])` - Filter logs using regex patterns
 
 ### Library Management
 - `ls([page], [size])` - List library items with pagination
@@ -139,8 +149,19 @@ After loading the script, you can:
 ### Hooking
 - `hook.method(index)` - Hook Java method
 - `hook.native(index)` - Hook native function
+- `hook.list()` - List all hooked methods and functions
+- `hook.unhook(index)` - Unhook a specific method or function
+- `hook.unhookAll()` - Remove all hooks
 - `hookm(index)` - Alias for hook.method(index)
 - `hookn(index)` - Alias for hook.native(index)
+- `hooked()` - Alias for hook.list()
+- `unhook(index)` - Alias for hook.unhook(index)
+
+### Function Calling
+- `call.native(index, ...args)` - Call a native function directly
+- `call.method(index, [methodIdx], ...args)` - Call a Java method directly
+- `callm(index, [methodIdx], ...args)` - Alias for call.method(index, ...args)
+- `calln(index, ...args)` - Alias for call.native(index, ...args)
 
 ### Memory Operations
 - `scan.type(value, [type], [prot])` - Scan memory
@@ -151,11 +172,17 @@ After loading the script, you can:
 - `scan.decreased([type])` - Find decreased values
 - `mem.read(index, [type])` - Read memory
 - `mem.write(index, value, [type])` - Write memory
+- `mem.view(index, [lines], [type])` - View memory in hex and type format
 - `mem.lock(index, value, [type])` - Lock memory value
 - `mem.unlock(index)` - Unlock memory
 - `mem.locked()` - Show locked memory
 - `mem.trace(index, [type])` - Trace memory access
 - `mem.watch(index, callback, [type])` - Watch for changes
+- `v(index, [lines], [type])` - Alias for mem.view
+- `r(index, [type])` - Alias for mem.read
+- `w(index, value, [type])` - Alias for mem.write
+- `l(index, value, [type])` - Alias for mem.lock
+- `ul(index)` - Alias for mem.unlock
 
 ### History Management
 - `hist.save([label])` - Save current logs
@@ -196,6 +223,34 @@ list.method(0)
 
 // Hook the setHealth method (assuming it's at index 5)
 hook.method(5)
+
+// List all hooked methods and functions
+hooked()
+
+// Unhook the method when you're done
+unhook(0)
+```
+
+### Memory Viewing and Navigation
+
+```javascript
+// Find pointer to player stats
+scan.type(100, 'int')  // search for health value
+
+// View 4 lines of memory at the first result (as bytes)
+mem.view(0)
+
+// View 6 lines of memory as integers
+mem.view(0, 6, 'int')
+
+// View memory before and after the pointer (negative lines)
+mem.view(0, -2)  // Shows 2 lines before and 2 lines after
+
+// Save specific byte address from the memory view
+sav(0, 12)  // Save the address at line 0, offset C (12)
+
+// Use the short alias
+v(0, 4, 'float')
 ```
 
 ### Memory Scanning and Manipulation
@@ -210,6 +265,12 @@ hist.save("Full Health")
 // Filter for values that decreased after taking damage
 scan.decreased()
 
+// Filter results containing "health" in their label
+grep("health")
+
+// View memory at the first result
+v(0, 4)
+
 // Lock the first result to 999
 mem.lock(0, 999)
 
@@ -218,6 +279,37 @@ mem.locked()
 
 // Unlock the first locked memory
 mem.unlock(0)
+```
+
+### Native Function Calling
+
+```javascript
+// List exported functions from libc
+list.module("libc")
+list.export(0, "malloc")
+
+// Save the malloc function to library
+sav(0)
+
+// Call malloc with size 1024
+call.native(0, 1024)
+```
+
+### Java Method Calling
+
+```javascript
+// Find a method to call
+list.class("String")
+list.method(0, "valueOf")
+
+// Save the method to library
+sav(0)
+
+// Call the valueOf method (with overload index 0) passing an integer
+callj(0, 0, 123)
+
+// For methods with multiple overloads, specify the overload index
+callj(0, 1, "a string argument")
 ```
 
 ### Library Management

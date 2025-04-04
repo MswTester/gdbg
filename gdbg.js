@@ -3,7 +3,7 @@
 // Configuration and state management
 const CONFIG = {
     version: "0.3.0",
-    pageSize: 10,        // Number of items to display per page
+    pageSize: 20,        // Number of items to display per page
     scanInterval: 200,   // Memory scan interval (ms)
     defaultScanType: 'int',
     colors: {
@@ -22,6 +22,7 @@ global.state = {
     lib: [],
     hist: [],
     locks: [],
+    hooks: [],
     logIndex: 0,
     lastScanType: CONFIG.defaultScanType,
     commands: []  // Command history
@@ -142,12 +143,18 @@ global.help = function(cmd) {
         console.log('  exps(module, [pattern]) - List exports of a module');
         console.log('  hookm(index)            - Hook Java method');
         console.log('  hookn(index)            - Hook native function');
+        console.log('  unhook(index)           - Unhook a method or function');
+        console.log('  hooked()                - List hooked methods/functions');
+        console.log('  calln(index, ...args)   - Call a native function');
+        console.log('  callj(index, [methodIdx], ...args) - Call a Java method');
+        console.log('  grep(pattern, [opts])   - Filter results by regex');
         console.log('  srch(value, [type], [prot]) - Scan memory');
         console.log('  exct(condFn, [type])    - Filter results by condition');
+        console.log('  v(index, [lines], [type]) - View memory in hex+type format');
+        console.log('  sav(index, [offset])    - Save pointer or offset to library');
         console.log('  nxt([offset], [count])  - Navigate next logs');
         console.log('  prv([offset])           - Navigate previous logs');
         console.log('  sort()                  - Sort current logs');
-        console.log('  sav([index])            - Save the value from logs to library');
         console.log('  ls([index], [count])    - Display library values');
         return;
     }
@@ -175,6 +182,43 @@ global.help = function(cmd) {
             console.log('  value: Value to lock to');
             console.log('  type: Memory type (default: pointer\'s type)');
             break;
+        case 'mem.view':
+            log.info('mem.view(index, [lines], [type]) - View memory in hex and type format');
+            console.log('  index: Pointer index');
+            console.log('  lines: Number of 16-byte lines to display (default: 4)');
+            console.log('         Use negative number to show memory before the pointer');
+            console.log('  type: Memory representation: byte, short, int, uint, float (default: byte)');
+            console.log('Note: Each line shows 16 bytes in both hex and type-specific format');
+            break;
+        case 'sav':
+            log.info('sav(index, [offset]) - Save the value from logs or memory view to library');
+            console.log('  index: Logs index or pointer for memory view');
+            console.log('  offset: Optional, byte offset within memory view (0-15 per line)');
+            console.log('          For example, sav(0, 12) saves byte at position C in first line');
+            break;
+        case 'grep':
+            log.info('grep(pattern, [options]) - Filter results by regex');
+            console.log('  pattern: Regular expression pattern to search for');
+            console.log('  options: Object with optional settings:');
+            console.log('    {caseSensitive: true/false, field: "label"/"type"/"value"}');
+            break; 
+        case 'hook.unhook':
+            log.info('hook.unhook(index) - Unhook a method or function');
+            console.log('  index: Hook index from hook.list()');
+            break;
+        case 'call.native':
+            log.info('call.native(index, ...args) - Call a native function');
+            console.log('  index: Function index from logs or library');
+            console.log('  args: Arguments to pass to the function');
+            break;
+        case 'call.java':
+            log.info('call.java(index, [methodIdx], ...args) - Call a Java method');
+            console.log('  index: Method index from logs or library');
+            console.log('  methodIdx: Optional, overload index (default: 0)');
+            console.log('  args: Arguments to pass to the method');
+            console.log('Note: Static methods are called directly. For non-static methods,');
+            console.log('      the tool attempts to create a new instance of the class.');
+            break;
         default:
             log.warning(`No help available for '${cmd}'. Use help() to see all commands.`);
     }
@@ -201,7 +245,38 @@ global.prv = function(s = CONFIG.pageSize) {
     nxt(-s, s);
 };
 
-global.sav = function (i) {
+global.sav = function (i, offset) {
+    // If offset is provided, it means we're saving from a memory view with offset
+    if (offset !== undefined) {
+        try {
+            const v = utils.resolve(i, 'ptr');
+            if (!v) return log.error(`sav(): Invalid pointer @ ${i}`);
+            
+            const baseAddr = v.address || v;
+            
+            // Calculate actual offsets
+            const lineOffset = Math.floor(offset / 16) * 16;
+            const byteOffset = offset % 16;
+            const targetAddr = baseAddr.add(lineOffset + byteOffset);
+            
+            // Create a new log entry for the specific address
+            const ptr = {
+                index: state.lib.length,
+                label: `${utils.formatAddress(targetAddr)} (ptr from view offset ${offset})`,
+                value: { address: targetAddr, type: 'byte' },
+                type: 'ptr'
+            };
+            
+            state.lib.push(ptr);
+            log.success(`Saved address with offset ${offset} as lib[${state.lib.length - 1}]`);
+            return;
+        } catch (e) {
+            log.error(`sav(): ${e}`);
+            return;
+        }
+    }
+    
+    // Original behavior for saving a log entry
     const l = state.logs[i];
     if (!l) return log.error(`sav(): Invalid logs index ${i}`);
     state.lib.push({ ...l });
@@ -234,6 +309,59 @@ global.sort = function () {
         nxt(0);
     } catch (e) {
         log.error(`sort() failed: ${e}`);
+    }
+};
+
+global.grep = function(pattern, options = {}) {
+    if (!state.logs.length) return log.error('grep: No logs to search');
+    
+    const caseSensitive = options.caseSensitive !== undefined ? options.caseSensitive : false;
+    const matchField = options.field || 'label';
+    
+    try {
+        log.info(`grep: Searching for "${pattern}" ${caseSensitive ? 'case sensitive' : 'case insensitive'}...`);
+        
+        // 정규식 객체 생성
+        const regex = new RegExp(pattern, caseSensitive ? '' : 'i');
+        
+        // 검색 결과 저장
+        const searchResults = [];
+        
+        state.logs.forEach(item => {
+            const testValue = matchField === 'label' ? item.label : 
+                             (matchField === 'type' ? item.type : 
+                             (matchField === 'value' ? JSON.stringify(item.value) : item.label));
+            
+            if (regex.test(testValue)) {
+                searchResults.push({...item});
+            }
+        });
+        
+        if (searchResults.length === 0) {
+            log.info(`grep: No matches found for pattern "${pattern}"`);
+            return;
+        }
+        
+        // 기존 로그 백업
+        hist.save('Before grep search');
+        
+        // 검색 결과로 로그 업데이트
+        state.logs.length = 0;
+        searchResults.forEach((item, idx) => {
+            state.logs.push({
+                ...item,
+                index: idx
+            });
+        });
+        
+        log.success(`grep: Found ${searchResults.length} matches`);
+        nxt(0);
+    } catch (e) {
+        if (e instanceof SyntaxError) {
+            log.error(`grep: Regular expression error - ${e.message}`);
+        } else {
+            log.error(`grep: ${e.message}`);
+        }
     }
 };
 
@@ -377,7 +505,14 @@ global.hook = {
             try {
                 log.info(`Hooking ${c}.${m}...`);
                 const clz = Java.use(c);
-                clz[m].overloads.forEach(o => {
+                const overloads = [];
+                
+                clz[m].overloads.forEach((o, idx) => {
+                    overloads.push({
+                        index: idx,
+                        args: o.argumentTypes.map(t => t.className).join(', ')
+                    });
+                    
                     o.implementation = function (...a) {
                         log.success(`${c}.${m}(${a.join(', ')})`);
                         const r = o.call(this, ...a);
@@ -385,6 +520,16 @@ global.hook = {
                         return r;
                     };
                 });
+                
+                // Store hooked method info
+                state.hooks.push({
+                    type: 'java',
+                    class: c,
+                    method: m,
+                    overloads: overloads,
+                    time: utils.getTime()
+                });
+                
                 log.success(`Hooked ${c}.${m}`);
             } catch (e) {
                 log.error(`hook.method(): ${e}`);
@@ -415,10 +560,186 @@ global.hook = {
                     console.log(`  → Return: ${utils.formatAddress(r)}`);
                 }
             });
+            
+            // Store hooked native function info
+            state.hooks.push({
+                type: 'native',
+                name: v.name,
+                address: v.address,
+                lib: v.lib,
+                time: utils.getTime()
+            });
+            
             log.success(`Hooked ${v.name}`);
         } catch (e) {
             log.error(`hook.native(): ${e}`);
         }
+    },
+    
+    list() {
+        if (!state.hooks.length) return log.info("No active hooks");
+        
+        log.info(`${state.hooks.length} active hooks:`);
+        state.hooks.forEach((h, i) => {
+            if (h.type === 'java') {
+                console.log(`[${i}] [Java] ${h.class}.${h.method} (${h.overloads.length} overloads) @ ${h.time}`);
+            } else if (h.type === 'native') {
+                console.log(`[${i}] [Native] ${h.name} @ ${utils.formatAddress(h.address)} (${h.lib}) @ ${h.time}`);
+            }
+        });
+    },
+    
+    unhook(i) {
+        const h = state.hooks[i];
+        if (!h) return log.error(`hook.unhook(): Invalid hook index @ ${i}`);
+        
+        try {
+            if (h.type === 'java') {
+                Java.perform(() => {
+                    try {
+                        const clz = Java.use(h.class);
+                        // Restore original implementation
+                        clz[h.method].overloads.forEach(o => {
+                            o.implementation = null;
+                        });
+                        log.success(`Unhooked Java method: ${h.class}.${h.method}`);
+                        state.hooks.splice(i, 1);
+                    } catch (e) {
+                        log.error(`Failed to unhook Java method: ${e}`);
+                    }
+                });
+            } else if (h.type === 'native') {
+                Interceptor.detachAll(h.address);
+                log.success(`Unhooked native function: ${h.name} @ ${utils.formatAddress(h.address)}`);
+                state.hooks.splice(i, 1);
+            }
+        } catch (e) {
+            log.error(`hook.unhook(): ${e}`);
+        }
+    },
+    
+    unhookAll() {
+        if (!state.hooks.length) return log.info("No hooks to remove");
+        
+        try {
+            // Unhook Java methods
+            Java.perform(() => {
+                state.hooks.filter(h => h.type === 'java').forEach(h => {
+                    try {
+                        const clz = Java.use(h.class);
+                        clz[h.method].overloads.forEach(o => {
+                            o.implementation = null;
+                        });
+                    } catch (e) {
+                        log.error(`Failed to unhook ${h.class}.${h.method}: ${e}`);
+                    }
+                });
+            });
+            
+            // Unhook native functions
+            state.hooks.filter(h => h.type === 'native').forEach(h => {
+                Interceptor.detachAll(h.address);
+            });
+            
+            const count = state.hooks.length;
+            state.hooks.length = 0;
+            log.success(`Unhooked ${count} hooks`);
+        } catch (e) {
+            log.error(`hook.unhookAll(): ${e}`);
+        }
+    }
+};
+
+global.call = {
+    native(i, ...args) {
+        const v = utils.resolve(i, 'func');
+        if (!v?.address) return log.error(`call.native(): Invalid func @ ${i}`);
+        
+        try {
+            log.info(`Calling ${v.name} @ ${utils.formatAddress(v.address)}...`);
+            
+            // Prepare arguments
+            const parsedArgs = args.map(arg => {
+                if (typeof arg === 'number') {
+                    return ptr(arg.toString());
+                }
+                return arg;
+            });
+            
+            // Call the function
+            const result = new NativeFunction(v.address, 'pointer', Array(parsedArgs.length).fill('pointer'))(
+                ...parsedArgs
+            );
+            
+            log.success(`Called ${v.name}`);
+            console.log(`  → Return: ${utils.formatAddress(result)} | ${result.toUInt32()}`);
+            return result;
+        } catch (e) {
+            log.error(`call.native(): ${e}`);
+            return null;
+        }
+    },
+    
+    method(i, methodIdx = 0, ...args) {
+        const m = utils.resolve(i, 'method');
+        if (!m?.class || !m?.method) return log.error(`call.java(): Invalid method @ ${i}`);
+        
+        Java.perform(() => {
+            try {
+                log.info(`Calling ${m.class}.${m.method}...`);
+                const clz = Java.use(m.class);
+                
+                // Check if method exists
+                if (!clz[m.method] || !clz[m.method].overloads) {
+                    return log.error(`call.java(): Method ${m.method} not found in class ${m.class}`);
+                }
+                
+                // Get all available overloads
+                const overloads = clz[m.method].overloads;
+                
+                if (methodIdx >= overloads.length) {
+                    log.error(`call.java(): Invalid overload index ${methodIdx}, max is ${overloads.length - 1}`);
+                    // List available overloads
+                    overloads.forEach((o, idx) => {
+                        const argTypes = o.argumentTypes.map(t => t.className).join(', ');
+                        console.log(`  [${idx}] ${m.method}(${argTypes})`);
+                    });
+                    return;
+                }
+                
+                const selectedMethod = overloads[methodIdx];
+                const argTypes = selectedMethod.argumentTypes.map(t => t.className).join(', ');
+                
+                log.info(`Using overload: ${m.method}(${argTypes})`);
+                
+                let result;
+                // Check if method is static or instance based on return type
+                const isStatic = selectedMethod.type.className.includes("static");
+                
+                if (isStatic) {
+                    // For static methods
+                    result = selectedMethod.call(clz, ...args);
+                } else {
+                    // For instance methods, we need an instance
+                    try {
+                        // Try to get a new instance
+                        const instance = clz.$new();
+                        result = selectedMethod.call(instance, ...args);
+                    } catch (e) {
+                        log.error(`Could not create instance of ${m.class}: ${e}`);
+                        log.info(`For non-static methods, you may need to obtain an instance separately`);
+                        return;
+                    }
+                }
+                
+                log.success(`Called ${m.class}.${m.method}`);
+                console.log(`  → Return: ${result}`);
+                return result;
+            } catch (e) {
+                log.error(`call.java(): ${e}`);
+                return null;
+            }
+        });
     }
 };
 
@@ -559,6 +880,95 @@ global.mem = {
         }
     },
 
+    view(i, lines = 10, t = "byte") {
+        const v = utils.resolve(i, 'ptr');
+        if (!v) return log.error(`mem.view(): Invalid pointer @ ${i}`);
+        const baseAddr = v.address || v;
+        const absLines = Math.abs(lines);
+        
+        try {
+            // Determine line offset based on lines parameter
+            const startOffset = lines < 0 ? -16 * absLines : 0;
+            const totalLines = lines < 0 ? absLines * 2 : absLines;
+            
+            // Print header
+            console.log('                       0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F');
+            
+            for (let lineIdx = 0; lineIdx < totalLines; lineIdx++) {
+                const lineOffset = startOffset + (lineIdx * 16);
+                const currentAddr = baseAddr.add(lineOffset);
+                let hexValues = '';
+                let typeValues = '';
+                
+                try {
+                    // Get bytes for the current line
+                    const bytes = currentAddr.readByteArray(16);
+                    const bytesArray = Array.from(new Uint8Array(bytes));
+                    
+                    // Format bytes as hex
+                    hexValues = bytesArray.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                    
+                    // Format type-specific values
+                    if (t === 'byte') {
+                        // Just use hex values
+                        typeValues = '';
+                    } else if (t === 'int' || t === 'uint') {
+                        // Show 4 32-bit integers per line (every 4 bytes)
+                        typeValues = '  ';
+                        for (let j = 0; j < 16; j += 4) {
+                            if (j + 3 < 16) {
+                                try {
+                                    const intValue = t === 'int' 
+                                        ? currentAddr.add(j).readS32() 
+                                        : currentAddr.add(j).readU32();
+                                    typeValues += intValue.toString().padStart(10, ' ') + '  ';
+                                } catch (e) {
+                                    typeValues += '          ';
+                                }
+                            }
+                        }
+                    } else if (t === 'short') {
+                        // Show 8 16-bit values per line (every 2 bytes)
+                        typeValues = '  ';
+                        for (let j = 0; j < 16; j += 2) {
+                            if (j + 1 < 16) {
+                                try {
+                                    const shortValue = currentAddr.add(j).readS16();
+                                    typeValues += shortValue.toString().padStart(6, ' ') + '  ';
+                                } catch (e) {
+                                    typeValues += '      ';
+                                }
+                            }
+                        }
+                    } else if (t === 'float') {
+                        // Show 4 floats per line (every 4 bytes)
+                        typeValues = '  ';
+                        for (let j = 0; j < 16; j += 4) {
+                            if (j + 3 < 16) {
+                                try {
+                                    const floatValue = currentAddr.add(j).readFloat().toFixed(2);
+                                    typeValues += floatValue.padStart(8, ' ') + '  ';
+                                } catch (e) {
+                                    typeValues += '        ';
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    hexValues = 'Cannot read memory';
+                }
+                
+                // Print the line
+                console.log(`[${lineIdx}] ${utils.formatAddress(currentAddr)}  ${hexValues}${typeValues}`);
+            }
+            
+            log.info(`Memory view of ${totalLines} lines at ${utils.formatAddress(baseAddr.add(startOffset))}, type: ${t}`);
+            return baseAddr;
+        } catch (e) {
+            log.error(`mem.view(): ${e}`);
+        }
+    },
+
     lock(i, val, t) {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.lock(): Invalid pointer @ ${i}`);
@@ -665,7 +1075,7 @@ global.hist = {
         if (!state.hist.length) return log.info("No history saved");
         
         log.table(state.hist, h => 
-            `[${h.index}] ${h.label} | ${h.count} items | ${h.time}`
+            `[${h.index}] ${h.label} | ${h.count} items | ${h.time}``[${h.index}] ${h.label} | ${h.count} items | ${h.time}`
         );
     },
 
@@ -943,6 +1353,10 @@ global.modls = global.list.module.bind(global.list);
 global.exps = global.list.export.bind(global.list);
 global.hookm = global.hook.method.bind(global.hook);
 global.hookn = global.hook.native.bind(global.hook);
+global.unhook = global.hook.unhook.bind(global.hook);
+global.hooked = global.hook.list.bind(global.hook);
+global.calln = global.call.native.bind(global.call);
+global.callm = global.call.method.bind(global.call);
 global.srch = global.scan.type.bind(global.scan);
 global.exct = global.scan.value.bind(global.scan);
 global.ls = global.lib.list.bind(global.lib);
@@ -952,6 +1366,7 @@ global.r = global.mem.read.bind(global.mem);
 global.w = global.mem.write.bind(global.mem);
 global.l = global.mem.lock.bind(global.mem);
 global.ul = global.mem.unlock.bind(global.mem);
+global.v = global.mem.view.bind(global.mem);
 
 // Initial info message
 console.log(`
@@ -970,3 +1385,4 @@ console.log(`
 `);
 
 log.info('gdbg.js loaded. Type help() to see available commands.');
+
