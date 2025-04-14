@@ -5,7 +5,7 @@ const CONFIG = {
     version: "0.3.1",
     pageSize: 20,        // Number of items to display per page
     scanInterval: 200,   // Memory scan interval (ms)
-    defaultScanType: 'int',
+    defaultScanType: 'uint',
     colors: {
         enabled: true,   // Enable colored logging
         info: '\x1b[36m',    // Cyan
@@ -58,23 +58,115 @@ const utils = {
         if (str.length <= maxLength) return str;
         return str.substring(0, maxLength - 3) + '...';
     },
+
+    formatSize(size) {
+        if (size < 1024) return `${size} B`;
+        if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+        if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+        return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    },
     
     toPattern(t, v) {
-        const length = (
-            t === "int" ||
-            t === "uint" ||
-            t === "float"
-        ) ? 4 : (
-            t === "long" ||
-            t === "ulong" ||
-            t === "double"
-        ) ? 8 : 1
-        if (t === 'string' || t === 'bytes') return v;
-        const b = new ArrayBuffer(length), dv = new DataView(b);
-        if (t === 'int') dv.setInt32(0, v, true);
-        if (t === 'uint') dv.setUint32(0, v, true);
-        if (t === 'float') dv.setFloat32(0, v, true);
-        return Array.from(new Uint8Array(b)).map(b => ('0' + b.toString(16)).slice(-2)).join(' ');
+        let buffer;
+        // Assume little-endian, common for mobile platforms. Adjust if needed.
+        const littleEndian = true;
+
+        try {
+            if (t === 'byte') {
+                if (typeof v !== 'number' || v < 0 || v > 255) throw new Error("Byte value must be a number between 0 and 255");
+                buffer = new ArrayBuffer(1);
+                new DataView(buffer).setUint8(0, v);
+            } else if (t === 'short') {
+                if (typeof v !== 'number') throw new Error("Short value must be a number");
+                buffer = new ArrayBuffer(2);
+                new DataView(buffer).setInt16(0, v, littleEndian);
+            } else if (t === 'ushort') {
+                 if (typeof v !== 'number') throw new Error("Unsigned short value must be a number");
+                buffer = new ArrayBuffer(2);
+                new DataView(buffer).setUint16(0, v, littleEndian);
+            } else if (t === 'int') {
+                if (typeof v !== 'number') throw new Error("Int value must be a number");
+                buffer = new ArrayBuffer(4);
+                new DataView(buffer).setInt32(0, v, littleEndian);
+            } else if (t === 'uint') {
+                if (typeof v !== 'number') throw new Error("Unsigned int value must be a number");
+                buffer = new ArrayBuffer(4);
+                new DataView(buffer).setUint32(0, v, littleEndian);
+            } else if (t === 'float') {
+                if (typeof v !== 'number') throw new Error("Float value must be a number");
+                buffer = new ArrayBuffer(4);
+                new DataView(buffer).setFloat32(0, v, littleEndian);
+            } else if (t === 'long') {
+                buffer = new ArrayBuffer(8);
+                new DataView(buffer).setBigInt64(0, BigInt(v), littleEndian);
+            } else if (t === 'ulong') {
+                buffer = new ArrayBuffer(8);
+                new DataView(buffer).setBigUint64(0, BigInt(v), littleEndian);
+            } else if (t === 'double') {
+                 if (typeof v !== 'number') throw new Error("Double value must be a number");
+                buffer = new ArrayBuffer(8);
+                new DataView(buffer).setFloat64(0, v, littleEndian);
+            } else if (t === 'string') {
+                if (typeof v !== 'string') throw new Error("String value must be a string");
+                // Simple UTF-8 conversion
+                const utf8Bytes = [];
+                for (let i = 0; i < v.length; i++) {
+                    let charcode = v.charCodeAt(i);
+                    if (charcode < 0x80) {
+                        utf8Bytes.push(charcode);
+                    } else if (charcode < 0x800) {
+                        utf8Bytes.push(0xc0 | (charcode >> 6),
+                                       0x80 | (charcode & 0x3f));
+                    } else if (charcode < 0xd800 || charcode >= 0xe000) {
+                        utf8Bytes.push(0xe0 | (charcode >> 12),
+                                       0x80 | ((charcode >> 6) & 0x3f),
+                                       0x80 | (charcode & 0x3f));
+                    } else { // Surrogate pair
+                        i++;
+                        // Low surrogate handling
+                        if (i >= v.length) throw new Error('Invalid surrogate pair');
+                        charcode = 0x10000 + (((charcode & 0x3ff) << 10)
+                                          | (v.charCodeAt(i) & 0x3ff));
+                        utf8Bytes.push(0xf0 | (charcode >> 18),
+                                       0x80 | ((charcode >> 12) & 0x3f),
+                                       0x80 | ((charcode >> 6) & 0x3f),
+                                       0x80 | (charcode & 0x3f));
+                    }
+                }
+                buffer = Uint8Array.from(utf8Bytes).buffer;
+            } else if (t === 'hex' || t === 'bytes') {
+                 // Allow direct hex string input like "12 34 ?? 56"
+                 if (typeof v !== 'string') {
+                     throw new Error("Value for 'hex'/'bytes' type must be a hex string pattern (e.g., '12 34 AB ?? EF')");
+                 }
+                 // Validate the pattern format roughly
+                 if (!/^(?:[0-9a-fA-F?]{2}\s*)+$/.test(v.trim())) {
+                    throw new Error("Invalid hex pattern format. Use space-separated hex bytes (e.g., '12 34 AB ?? EF')");
+                 }
+                 // Return the validated hex string directly for Memory.scanSync
+                 return v.trim();
+            }
+             else {
+                 throw new Error(`Unsupported type for pattern generation: ${t}`);
+            }
+
+            // Convert ArrayBuffer to hex string "XX XX XX"
+            const bytes = new Uint8Array(buffer);
+            const hexString = Array.from(bytes)
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join(' ');
+            return hexString;
+
+        } catch (e) {
+            // Use the existing log system if available, otherwise console.error
+            const errorMsg = `Error creating pattern for type ${t}, value ${v}: ${e.message}`;
+            if (typeof log !== 'undefined' && log.error) {
+                 log.error(errorMsg);
+            } else {
+                console.error(errorMsg);
+            }
+            return null; // Return null on failure
+        }
     }
 };
 
@@ -465,7 +557,7 @@ global.list = {
             mods.forEach((m, i) =>
                 state.logs.push({
                     index: i,
-                    label: `${utils.formatAddress(m.base)} | ${m.name} (${m.size}B)`,
+                    label: `${utils.formatAddress(m.base)} | ${m.name} (${utils.formatSize(m.size)})`,
                     value: { name: m.name, base: m.base, size: m.size },
                     type: 'module'
                 })
@@ -753,11 +845,10 @@ global.call = {
 };
 
 global.scan = {
-    type(val, t = CONFIG.defaultScanType, p = 'r--') {
+    type(val, t = CONFIG.defaultScanType, p = 'r-x') {
         state.logs.length = 0;
         state.lastScanType = t;
         let idx = 0, count = 0;
-        
         try {
             log.info(`Scanning memory (type: ${t}, value: ${val}, prot: ${p})...`);
             Process.enumerateRanges({ protection: p }).forEach(r => {
@@ -861,7 +952,7 @@ global.scan = {
 };
 
 global.mem = {
-    read(i, t = "int") {
+    read(i, t = "uint") {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.read(): Invalid pointer @ ${i}`);
         const addr = v.address || v, type = t || v.type;
@@ -889,7 +980,7 @@ global.mem = {
         }
     },
 
-    view(i, lines = 10, t = "byte") {
+    view(i, t = "byte", lines = 10) {
         const v = utils.resolve(i, 'ptr');
         if (!v) return log.error(`mem.view(): Invalid pointer @ ${i}`);
         const baseAddr = v.address || v;
@@ -901,7 +992,7 @@ global.mem = {
             const totalLines = lines < 0 ? absLines * 2 : absLines;
             
             // Print header
-            console.log('                       0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F');
+            console.log('                      0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F');
             
             for (let lineIdx = 0; lineIdx < totalLines; lineIdx++) {
                 const lineOffset = startOffset + (lineIdx * 16);
@@ -968,7 +1059,7 @@ global.mem = {
                 }
                 
                 // Print the line
-                console.log(`[${lineIdx}] ${utils.formatAddress(currentAddr)}  ${hexValues}${typeValues}`);
+                console.log(`[${lineIdx}] ${utils.formatAddress(currentAddr).padEnd(16, ' ')}  ${hexValues}${typeValues}`);
             }
             
             log.info(`Memory view of ${totalLines} lines at ${utils.formatAddress(baseAddr.add(startOffset))}, type: ${t}`);
