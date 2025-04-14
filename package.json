@@ -1,6 +1,6 @@
 {
   "name": "gdbg",
-  "version": "1.0.0",
+  "version": "0.4.0",
   "description": "A powerful, lightweight memory debugging and analysis toolkit for game hacking and reverse engineering using Frida.",
   "main": "index.js",
   "scripts": {

@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 const { Command } = require('commander');
+const frida = require('frida');
+const repl = require('repl');
+const fs = require('fs');
+const chalk = require('chalk');
 const program = new Command();
 
 // Define program information
@@ -17,21 +21,64 @@ program
     .option('-U, --usb', 'connect to USB device') // Option with a value
     .option('-R, --remote', 'connect to remote frida-server') // Option with a value
     .option('-H, --host <HOST>', 'connect to remote frida-server on HOST') // Option with a value
+    .option('-f, --file <TARGET>', 'spawn FILE') // Option with a value
+    .option('-n, --attach-name <NAME>', 'attach to NAME') // Option with a value
+    .option('-p, --pid <PID>', 'attach to process with PID') // Option with a value
+    .description('Connect to a target process using Frida and start a REPL session')
+    .action(async (options) => {
+        // Check if any of the options are provided
+        if (!options.device && !options.usb && !options.remote && !options.host) {
+            console.error('Error: No device option provided.');
+            program.outputHelp();
+            process.exit(1);
+        }
+        if (!options.file && !options.attachName && !options.pid) {
+            console.error('Error: No target specified.');
+            program.outputHelp();
+            process.exit(1);
+        }
 
-// // Define a command
-// program
-//     .command('greet')
-//     .description('Greets the user')
-//     .argument('<name>', 'Name of the person to greet') // Required argument
-//     .option('-l, --loud', 'Greet loudly') // Optional flag
-//     .action((name, options) => {
-//         // Action to perform when the command is executed
-//         let greeting = `Hello, ${name}!`;
-//         if (options.loud) {
-//             greeting = greeting.toUpperCase();
-//         }
-//         console.log(greeting);
-//     });
+        // Connect to the target process using Frida
+        let session;
+        try {
+            const device = await (
+                options.usb ? frida.getUsbDevice() :
+                options.remote ? frida.getRemoteDevice() :
+                options.host ? frida.getDeviceManager().addRemoteDevice(options.host) :
+                options.device ? frida.getDevice(options.device) :
+                frida.getLocalDevice()
+            )
+            if(options.file) {
+                const pid = await device.spawn(options.file);
+                session = await device.attach(pid);
+            } else {
+                session = await device.attach(options.attachName || +options.pid);
+            }
+            console.log('Connected to target process.');
+        } catch (error) {
+            console.error('Error connecting to target process:', error.message);
+            process.exit(1);
+        }
+        await session.resume();
+
+        const script = await session.createScript(`
+            send('Hello from Frida!');
+            recv('message', (message) => {
+                console.log(message);
+            });
+            console.log('Script loaded and running.');
+        `);
+        await script.load();
+        const replServer = repl.start({ prompt: 'gdbg>' });
+
+        replServer.defineCommand('exit', {
+            action: () => {
+                console.log('Exiting...');
+                session.detach();
+                replServer.close();
+            }
+        });
+    });
 
 // Parse the command-line arguments
 program.parse(process.argv);
