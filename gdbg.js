@@ -1468,7 +1468,30 @@ global.l = global.mem.lock.bind(global.mem);
 global.ul = global.mem.unlock.bind(global.mem);
 global.v = global.mem.view.bind(global.mem);
 
-// Initial info message
+// CLI 지원을 위한 RPC 핸들러 설정
+(function setupRpcHandler() {
+    // 외부에서 호출할 수 있는 핸들러
+    rpc.exports = {
+        // 명령어 실행
+        executeCommand: function(cmd) {
+            try {
+                // 명령어 실행
+                const result = eval(cmd);
+                return {
+                    status: 'success',
+                    result: result
+                };
+            } catch (e) {
+                return {
+                    status: 'error',
+                    error: e.toString()
+                };
+            }
+        }
+    };
+})();
+
+// 초기 정보 메시지
 console.log(`
         _____ _____  ____   _____ 
        / ____|  __ \\|  _ \\ / ____|

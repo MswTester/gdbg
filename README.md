@@ -1,371 +1,189 @@
-# gdbg.js - Game Debugging Toolkit for Frida
+# GDBG - Game Debugger & Memory Analysis Tool
 
-A powerful, lightweight memory debugging and analysis toolkit for game hacking and reverse engineering using Frida.
+GDBG is a powerful CLI tool for game debugging and memory analysis built on top of the Frida instrumentation toolkit. It provides an intuitive command-line interface for common Frida operations, making it easier to hook functions, scan memory, and manipulate game memory.
 
 ## Features
 
-- **Memory scanning and manipulation**
-  - Search for values in memory
-  - Monitoring and locking memory values
-  - Incremental scanning (decreased/increased values)
-  - Memory tracing
-  - Hexadecimal and type-specific memory view
-
-- **Java method and native function inspection**
-  - List and search for loaded Java classes
-  - Enumerate methods of classes
-  - List modules and exports
-  - Hook Java methods and native functions
-  - Unhook methods and functions
-  - Call native functions and Java methods directly
-
-- **Rich command interface**
-  - Command history and aliases
-  - Color-coded output
-  - Pagination for large results
-  - Intuitive shorthand commands
-  - Filter logs with grep-like regex search
-
-- **Library and history management**
-  - Save, organize, and manage important memory addresses
-  - Move, sort, and filter library items
-  - Save, load, and compare scan results
-  - Track memory changes over time
+- Java class/method exploration
+- Native module/function hooking
+- Memory scanning and manipulation
+- Value locking
+- Memory viewing in various formats
+- History tracking and comparison
+- And more...
 
 ## Installation
 
-1. Make sure you have Frida installed:
-   ```
-   pip install frida-tools
-   ```
+### Using Pre-built Binaries
 
-2. Download the `gdbg.js` script to your computer
+Download the appropriate binary for your platform from the releases page:
 
-3. Inject the script into your target process using Frida:
-   ```
-   frida -U -l gdbg.js -f com.example.app --no-pause
-   ```
+- Windows: `gdbg-win.exe`
+- macOS: `gdbg-macos`
+- Linux: `gdbg-linux`
 
-   Or with Frida's Python bindings:
-   ```python
-   import frida
-   
-   device = frida.get_usb_device()
-   pid = device.spawn(["com.example.app"])
-   session = device.attach(pid)
-   script = session.create_script(open("gdbg.js").read())
-   script.load()
-   device.resume(pid)
-   ```
+Make the file executable on macOS/Linux:
 
-## Quick Start
+```bash
+chmod +x gdbg-macos  # or gdbg-linux
+```
 
-After loading the script, you can:
+### Building from Source
 
-1. List all Java classes in the application:
-   ```javascript
-   list.class()
-   ```
+To build GDBG from source, you need Node.js and npm installed.
 
-2. Search for a specific class:
-   ```javascript
-   list.class("MainActivity")
-   ```
+1. Clone the repository:
+```bash
+git clone https://github.com/MswTester/gdbg.git
+cd gdbg
+```
 
-3. View methods of a class (using the index from previous result):
-   ```javascript
-   list.method(0)
-   ```
+2. Install dependencies:
+```bash
+npm install
+```
 
-4. Hook a method (using the index from previous result):
-   ```javascript
-   hook.method(3)
-   ```
+3. Build for all platforms:
+```bash
+npm run build-all
+```
 
-5. Scan for an integer value in memory:
-   ```javascript
-   scan.type(100)
-   ```
+Or build for a specific platform:
+```bash
+npm run build-win    # Windows
+npm run build-macos  # macOS
+npm run build-linux  # Linux
+```
 
-6. Filter scan results to find values that have increased:
-   ```javascript
-   scan.increased()
-   ```
+The binaries will be generated in the `dist` directory.
 
-7. Lock a memory address to a specific value:
-   ```javascript
-   mem.lock(0, 999)
-   ```
+## Usage
 
-8. Save important memory addresses to your library:
-   ```javascript
-   sav(0)  // Save the first result to library
-   ls()    // List library items
-   ```
+### Basic Usage
 
-9. Filter logs using regex pattern:
-   ```javascript
-   grep("player")  // Find all entries containing "player"
-   ```
+```bash
+# Connect to USB device and attach to process by name
+gdbg -U -n com.example.app
 
-10. Get help on a specific command:
-    ```javascript
-    help("scan.type")
-    ```
+# Connect to remote frida-server and attach to process by PID
+gdbg -R -p 1234
+
+# Connect to specific device and spawn process
+gdbg -D 123abc -f /path/to/executable
+```
+
+### Command Examples
+
+Once in the GDBG REPL, you can run commands like:
+
+```
+# List Java classes containing "MainActivity"
+list class MainActivity
+
+# Hook a Java method
+hook method 0
+
+# Scan memory for a specific value
+search 12345 int
+
+# View memory at a specific address
+view 0 10 int
+
+# Lock a memory value
+mem lock 0 100 int
+```
+
+Type `help` to see all available commands.
 
 ## Command Reference
 
-### Log Navigation
-- `nxt([offset], [count])` - Navigate forward through logs
-- `prv([count])` - Navigate backward through logs
-- `sort()` - Sort current logs
-- `grep(pattern, [options])` - Filter logs using regex patterns
+### Basic Commands
 
-### Library Management
-- `ls([page], [size])` - List library items with pagination
-- `sav(index)` - Save log item to library
-- `rm(index)` - Remove item from library
-- `mv(fromIdx, toIdx)` - Move item within library
-- `lib.save(index)` - Same as sav(index)
-- `lib.list([page], [size])` - Same as ls(page, size)
-- `lib.remove(index)` - Same as rm(index)
-- `lib.move(fromIdx, toIdx)` - Same as mv(fromIdx, toIdx)
-- `lib.clear()` - Clear all library items
-- `lib.sort([field])` - Sort library items by field (label, type, index, address)
-- `lib.find(pattern, [field])` - Find items in library matching pattern
-- `lib.export(index)` - Export library item back to logs
-- `lib.duplicate(index)` - Create a copy of a library item
+- `help` - Display help information
+- `list class [pattern]` - List Java classes
+- `list method <class> [pattern]` - List methods of a class
+- `list module [pattern]` - List loaded modules
+- `list export <module> [pattern]` - List exports of a module
 
-### Class and Method Inspection
-- `list.class([pattern])` - List Java classes
-- `list.method(class, [pattern])` - List methods of a class
-- `list.module([pattern])` - List loaded modules
-- `list.export(module, [pattern])` - List exports of a module
-- `clss(pattern)` - Alias for list.class(pattern)
-- `meths(class)` - Alias for list.method(class)
-- `modls(class)` - Alias for list.module(pattern)
-- `exps(class)` - Alias for list.export(module, pattern)
+### Hook Commands
 
-### Hooking
-- `hook.method(index)` - Hook Java method
-- `hook.native(index)` - Hook native function
-- `hook.list()` - List all hooked methods and functions
-- `hook.unhook(index)` - Unhook a specific method or function
-- `hook.unhookAll()` - Remove all hooks
-- `hookm(index)` - Alias for hook.method(index)
-- `hookn(index)` - Alias for hook.native(index)
-- `hooked()` - Alias for hook.list()
-- `unhook(index)` - Alias for hook.unhook(index)
+- `hook method <index>` - Hook Java method
+- `hook native <index>` - Hook native function
+- `unhook <index>` - Unhook a method or function
+- `hooked` - List hooked methods/functions
 
-### Function Calling
-- `call.native(index, ...args)` - Call a native function directly
-- `call.method(index, [methodIdx], ...args)` - Call a Java method directly
-- `callm(index, [methodIdx], ...args)` - Alias for call.method(index, ...args)
-- `calln(index, ...args)` - Alias for call.native(index, ...args)
+### Memory Commands
 
-### Memory Operations
-- `scan.type(value, [type], [prot])` - Scan memory
-- `scan.next(condFn, [type])` - Filter results by condition
-- `scan.value(value, [type])` - Find exact values
-- `scan.range(min, max, [type])` - Find values in range
-- `scan.increased([type])` - Find increased values
-- `scan.decreased([type])` - Find decreased values
-- `mem.read(index, [type])` - Read memory
-- `mem.write(index, value, [type])` - Write memory
-- `mem.view(index, [lines], [type])` - View memory in hex and type format
-- `mem.lock(index, value, [type])` - Lock memory value
-- `mem.unlock(index)` - Unlock memory
-- `mem.locked()` - Show locked memory
-- `mem.trace(index, [type])` - Trace memory access
-- `mem.watch(index, callback, [type])` - Watch for changes
-- `v(index, [lines], [type])` - Alias for mem.view
-- `r(index, [type])` - Alias for mem.read
-- `w(index, value, [type])` - Alias for mem.write
-- `l(index, value, [type])` - Alias for mem.lock
-- `ul(index)` - Alias for mem.unlock
+- `mem read <index> [type]` - Read value from memory address
+- `mem write <index> <value> [type]` - Write value to memory address
+- `mem view <index> [lines] [type]` - View memory in hex+type format
+- `mem lock <index> <value> [type]` - Lock memory value
+- `mem unlock <index>` - Unlock memory value
 
-### History Management
-- `hist.save([label])` - Save current logs
-- `hist.list()` - List saved histories
-- `hist.load(index)` - Load history
-- `hist.clear()` - Clear history
-- `hist.compare(index1, index2)` - Compare histories
+### Search Commands
 
-### Configuration and Utilities
-- `help([command])` - Display help information
-- `config.show()` - Show current settings
-- `config.set(key, value)` - Change settings
-- `cmd.history()` - Show command history
-- `cmd.alias(name, command)` - Create command alias
-
-## Memory Types
-
-The following memory types are supported:
-
-- `byte` - Unsigned 8-bit integer
-- `short` - Unsigned 16-bit integer
-- `int` - Signed 32-bit integer
-- `uint` - Unsigned 32-bit integer
-- `float` - 32-bit floating point
-- `string` - UTF-8 string
-- `bytes` - Byte array
-
-## Examples
-
-### Finding and Hooking a Method
-
-```javascript
-// Search for the player class
-list.class("Player")
-
-// List methods in the first result
-list.method(0)
-
-// Hook the setHealth method (assuming it's at index 5)
-hook.method(5)
-
-// List all hooked methods and functions
-hooked()
-
-// Unhook the method when you're done
-unhook(0)
-```
-
-### Memory Viewing and Navigation
-
-```javascript
-// Find pointer to player stats
-scan.type(100, 'int')  // search for health value
-
-// View 4 lines of memory at the first result (as bytes)
-mem.view(0)
-
-// View 6 lines of memory as integers
-mem.view(0, 6, 'int')
-
-// View memory before and after the pointer (negative lines)
-mem.view(0, -2)  // Shows 2 lines before and 2 lines after
-
-// Save specific byte address from the memory view
-sav(0, 12)  // Save the address at line 0, offset C (12)
-
-// Use the short alias
-v(0, 4, 'float')
-```
-
-### Memory Scanning and Manipulation
-
-```javascript
-// Scan for player health (value 100)
-scan.type(100)
-
-// Take note of the current values
-hist.save("Full Health")
-
-// Filter for values that decreased after taking damage
-scan.decreased()
-
-// Filter results containing "health" in their label
-grep("health")
-
-// View memory at the first result
-v(0, 4)
-
-// Lock the first result to 999
-mem.lock(0, 999)
-
-// Check locked memory addresses
-mem.locked()
-
-// Unlock the first locked memory
-mem.unlock(0)
-```
-
-### Native Function Calling
-
-```javascript
-// List exported functions from libc
-list.module("libc")
-list.export(0, "malloc")
-
-// Save the malloc function to library
-sav(0)
-
-// Call malloc with size 1024
-call.native(0, 1024)
-```
-
-### Java Method Calling
-
-```javascript
-// Find a method to call
-list.class("String")
-list.method(0, "valueOf")
-
-// Save the method to library
-sav(0)
-
-// Call the valueOf method (with overload index 0) passing an integer
-callj(0, 0, 123)
-
-// For methods with multiple overloads, specify the overload index
-callj(0, 1, "a string argument")
-```
-
-### Library Management
-
-```javascript
-// Scan for important values
-scan.type(100)
-
-// Save multiple results to library
-sav(0)   // First result
-sav(5)   // Sixth result
-sav(10)  // Eleventh result
-
-// List library items
-ls()  // First page
-ls(1) // Second page if needed
-
-// Sort library items by type
-lib.sort('type')
-
-// Find items with "health" in their label
-lib.find("health", "label")
-
-// Move item from index 2 to index 0
-mv(2, 0)
-
-// Remove item at index 1
-rm(1)
-
-// Export an item back to logs
-lib.export(0)
-
-// Clear all library items when finished
-lib.clear()
-```
-
-### Creating Custom Aliases
-
-```javascript
-// Create an alias to search for health values
-cmd.alias("findHealth", "scan.type(100, 'int')")
-
-// Use the new alias
-findHealth()
-
-// Create an alias with parameters
-cmd.alias("lockHealth", "mem.lock($0, 999)")
-
-// Use the parameterized alias
-lockHealth(0)
-```
+- `search <value> [type] [prot]` - Scan memory
+- `exact <value> [type]` - Filter results by exact value
+- `grep <pattern>` - Filter results by regex
 
 ## License
 
-This project is released under the MIT License.
+MIT License
 
-## Acknowledgements
+## 모듈화 구조
 
-This tool was built using Frida (https://frida.re), a dynamic instrumentation toolkit. 
+gdbg는 이제 두 가지 주요 부분으로 모듈화되었습니다:
+
+1. CLI 모듈 (`src/cli`, `src/commands`, `src/repl`, `src/utils`)
+   - CLI 명령어 및 REPL 기능을 담당
+
+2. Frida 에이전트 모듈 (`src/frida`)
+   - frida-compile을 사용하여 모듈화된 Frida 스크립트
+   - 모든 메모리 조작 및 후킹 기능 포함
+
+### 개발 방법
+
+스크립트를 수정한 후에는 다음 명령어로 컴파일해야 합니다:
+
+```bash
+npm run compile-agent
+```
+
+이 명령어는 `frida-agent.js`와 모든 관련 모듈을 `gdbg.js`로 컴파일합니다.
+
+### 모듈 구조
+
+```
+src/
+├── cli/            # CLI 메인 모듈
+│   ├── index.js
+│   └── version.js
+├── commands/       # CLI 명령어
+│   ├── frida.js
+│   ├── index.js
+│   └── repl.js
+├── repl/           # REPL 기능
+│   ├── commands.js
+│   ├── completer.js
+│   ├── evaluator.js
+│   └── index.js
+├── utils/          # 공통 유틸리티
+│   └── index.js
+└── frida/          # Frida 에이전트 모듈
+    ├── index.js    # 메인 진입점
+    ├── config.js   # 설정
+    ├── state.js    # 전역 상태
+    ├── utils.js    # 유틸리티
+    ├── logger.js   # 로깅
+    ├── memory.js   # 메모리 유틸리티
+    ├── help.js     # 도움말
+    ├── list.js     # 목록 기능
+    ├── hook.js     # 후킹 기능
+    ├── call.js     # 함수 호출
+    ├── scan.js     # 메모리 스캔
+    ├── mem.js      # 메모리 조작
+    ├── history.js  # 히스토리 관리
+    ├── library.js  # 라이브러리 관리
+    ├── cmd.js      # 명령어 관리
+    └── navigation.js # 탐색 기능
+``` 
