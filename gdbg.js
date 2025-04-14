@@ -2,7 +2,7 @@
 
 // Configuration and state management
 const CONFIG = {
-    version: "0.3.0",
+    version: "0.3.1",
     pageSize: 20,        // Number of items to display per page
     scanInterval: 200,   // Memory scan interval (ms)
     defaultScanType: 'int',
@@ -60,8 +60,17 @@ const utils = {
     },
     
     toPattern(t, v) {
+        const length = (
+            t === "int" ||
+            t === "uint" ||
+            t === "float"
+        ) ? 4 : (
+            t === "long" ||
+            t === "ulong" ||
+            t === "double"
+        ) ? 8 : 1
         if (t === 'string' || t === 'bytes') return v;
-        const b = new ArrayBuffer(4), dv = new DataView(b);
+        const b = new ArrayBuffer(length), dv = new DataView(b);
         if (t === 'int') dv.setInt32(0, v, true);
         if (t === 'uint') dv.setUint32(0, v, true);
         if (t === 'float') dv.setFloat32(0, v, true);
