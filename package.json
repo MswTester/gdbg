@@ -9,9 +9,9 @@
   "scripts": {
     "start": "node index.js",
     "build": "pkg . --compress GZip",
-    "build-win": "pkg . --targets node16-win-x64 --output dist/gdbg-win.exe --compress GZip",
-    "build-macos": "pkg . --targets node16-macos-x64 --output dist/gdbg-macos --compress GZip",
-    "build-linux": "pkg . --targets node16-linux-x64 --output dist/gdbg-linux --compress GZip",
+    "build-win": "pkg . --targets node18-win-x64 --output dist/gdbg-win.exe --compress GZip",
+    "build-macos": "pkg . --targets node18-macos-x64 --output dist/gdbg-macos --compress GZip",
+    "build-linux": "pkg . --targets node18-linux-x64 --output dist/gdbg-linux --compress GZip",
     "build-all": "npm run build-win && npm run build-macos && npm run build-linux",
     "compile-agent": "frida-compile frida-agent.js -o gdbg.js -c"
   },
@@ -30,7 +30,7 @@
   "dependencies": {
     "chalk": "^4.1.2",
     "commander": "^10.0.0",
-    "frida": "^16.0.8"
+    "frida": "^16.7.11"
   },
   "devDependencies": {
     "frida-compile": "^16.4.2",
@@ -39,13 +39,17 @@
   "pkg": {
     "scripts": "index.js",
     "assets": [
-      "gdbg.js"
+      "gdbg.js",
+      "node_modules/frida/**/*.js",
+      "node_modules/frida/lib/binding/**/*.node",
+      "node_modules/frida/build/**/*.node"
     ],
     "targets": [
-      "node16-win-x64",
-      "node16-macos-x64",
-      "node16-linux-x64"
+      "node18-win-x64",
+      "node18-macos-x64",
+      "node18-linux-x64"
     ],
-    "outputPath": "dist"
+    "outputPath": "dist",
+    "nodePath": "node_modules"
   }
 }

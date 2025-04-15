@@ -47,6 +47,8 @@ Download the appropriate binary for your platform from the releases page:
 - macOS: `gdbg-macos`
 - Linux: `gdbg-linux`
 
+These binaries include all necessary dependencies and don't require Node.js or Frida to be installed.
+
 Make the file executable on macOS/Linux:
 
 ```bash
