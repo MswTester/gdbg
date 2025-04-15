@@ -4,7 +4,6 @@
 
 const utils = require('./utils');
 const log = require('./logger');
-const config = require('./config');
 
 const locks = {};
 const lockIndex = [];

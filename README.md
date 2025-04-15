@@ -2,6 +2,10 @@
 
 GDBG is a powerful CLI tool for game debugging and memory analysis built on top of the Frida instrumentation toolkit. It provides an intuitive command-line interface for common Frida operations, making it easier to hook functions, scan memory, and manipulate game memory.
 
+## Credits
+
+GDBG is built on top of the [Frida](https://frida.re) instrumentation toolkit, which provides the core capabilities for process instrumentation and memory manipulation. We extend our gratitude to the Frida community and contributors for their invaluable work and support.
+
 ## Table of Contents
 
 - [Features](#features)

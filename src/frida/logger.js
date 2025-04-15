@@ -2,7 +2,6 @@
  * Logging system module
  */
 
-const utils = require('./utils');
 
 // Logging system
 const log = {

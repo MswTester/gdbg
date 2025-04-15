@@ -4,7 +4,7 @@
 
 // Configuration and state management
 const CONFIG = {
-    version: "0.5.0",
+    version: "0.6.0",
     pageSize: 20,        // Number of items to display per page
     scanInterval: 200,   // Memory scan interval (ms)
     defaultScanType: 'uint',
