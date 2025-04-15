@@ -1,6 +1,6 @@
 /**
- * gdbg.js - 메인 진입점
- * frida-compile 호환 모듈
+ * gdbg.js - Main entry point
+ * frida-compile compatible module
  */
 
 const config = require('./config');
@@ -16,10 +16,10 @@ const lib = require('./library');
 const call = require('./call');
 const cmd = require('./cmd');
 
-// 전역 상태 초기화
+// Initialize global state
 require('./state');
 
-// 전역 별칭 및 함수 내보내기
+// Export global aliases and functions
 global.help = require('./help');
 global.nxt = require('./navigation').nxt;
 global.prv = require('./navigation').prv;
@@ -28,7 +28,7 @@ global.sort = require('./navigation').sort;
 global.grep = require('./navigation').grep;
 global.config = config;
 
-// 기능 별 모듈 내보내기
+// Export feature-specific modules
 global.list = list;
 global.hook = hook;
 global.call = call;
@@ -38,7 +38,7 @@ global.hist = hist;
 global.lib = lib;
 global.cmd = cmd;
 
-// 전역 별칭 등록
+// Register global aliases
 global.clss = global.list.class.bind(global.list);
 global.meths = global.list.method.bind(global.list);
 global.modls = global.list.module.bind(global.list);
@@ -60,14 +60,14 @@ global.l = global.mem.lock.bind(global.mem);
 global.ul = global.mem.unlock.bind(global.mem);
 global.v = global.mem.view.bind(global.mem);
 
-// CLI 지원을 위한 RPC 핸들러 설정
+// Set up RPC handler for CLI support
 (function setupRpcHandler() {
-  // 외부에서 호출할 수 있는 핸들러
+  // Handlers that can be called externally
   rpc.exports = {
-    // 명령어 실행
+    // Execute command
     executeCommand: function(cmd) {
       try {
-        // 명령어 실행
+        // Execute the command
         const result = eval(cmd);
         return {
           status: 'success',
@@ -83,7 +83,7 @@ global.v = global.mem.view.bind(global.mem);
   };
 })();
 
-// 초기 정보 메시지
+// Initial information message
 console.log(`
         _____ _____  ____   _____ 
        / ____|  __ \\|  _ \\ / ____|
@@ -99,9 +99,9 @@ console.log(`
 ===========================================
 `);
 
-log.info('gdbg.js loaded. Type help() to see available commands.');
+log.info('gdbg.js loaded. Type "help" to see available commands.');
 
-// 환경 감지
+// Detect environment
 (function detectEnvironment() {
   try {
     if (ObjC.available) {
@@ -114,7 +114,7 @@ log.info('gdbg.js loaded. Type help() to see available commands.');
   }
 })();
 
-// 명령어 프록시 설정
+// Set up command proxy
 (function setupCommandProxy() {
   const originalEval = global.eval;
   global.eval = function(cmd) {

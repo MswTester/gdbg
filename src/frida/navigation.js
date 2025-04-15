@@ -1,158 +1,152 @@
 /**
- * 탐색 관련 기능 모듈
+ * Navigation functions module
  */
 
-const config = require('./config');
-const utils = require('./utils');
 const log = require('./logger');
+const utils = require('./utils');
+const config = require('./config');
 
-function nxt(o = config.pageSize, s = config.pageSize) {
-    global.state.logIndex += o;
-    if (global.state.logIndex < 0) global.state.logIndex = 0;
-    if (global.state.logIndex >= global.state.logs.length) global.state.logIndex = Math.max(0, global.state.logs.length - s);
+// Navigate to a specific index with pagination
+function nxt(i = null) {
+    const s = config.pageSize;
+    const p = i === null ? Math.floor(global.state.logIndex / s) + 1 : parseInt(i);
+    global.state.logIndex = p * s;
     
-    log.info(`항목 ${global.state.logIndex + 1}-${Math.min(global.state.logIndex + s, global.state.logs.length)} / ${global.state.logs.length}`);
-    
-    const items = global.state.logs.slice(global.state.logIndex, Math.min(global.state.logIndex + s, global.state.logs.length));
-    
-    if (!items.length) {
-        log.info('표시할 항목이 없습니다');
-        return;
+    if (global.state.logs.length > 0) {
+        log.info(`Items ${global.state.logIndex + 1}-${Math.min(global.state.logIndex + s, global.state.logs.length)} / ${global.state.logs.length}`);
+        displayPage();
+        return global.state.logIndex;
+    } else {
+        log.info('No items to display');
+        return 0;
+    }
+}
+
+// Save an item to the library
+function sav(i, label) {
+    // When offset is provided, it means saving from memory view
+    if (i && i.hasOwnProperty('offset')) {
+        const addr = global.state.memViewBase.add(parseInt(i.offset));
+        const lib = require('./library');
+        return lib.save(addr, label);
     }
     
-    items.forEach(l => console.log(`[${l.index}] ${l.label}`));
+    const lib = require('./library');
+    return lib.save(i, label);
 }
 
-function prv(s = config.pageSize) {
-    nxt(-s, s);
+// Go to previous page
+function prv(i = null) {
+    const s = config.pageSize;
+    const p = i === null ? Math.floor(global.state.logIndex / s) - 1 : parseInt(i);
+    global.state.logIndex = Math.max(0, p * s);
+    
+    if (global.state.logs.length > 0) {
+        log.info(`Items ${global.state.logIndex + 1}-${Math.min(global.state.logIndex + s, global.state.logs.length)} / ${global.state.logs.length}`);
+        displayPage();
+        return global.state.logIndex;
+    } else {
+        log.info('No items to display');
+        return 0;
+    }
 }
 
-function sav(i, offset) {
-    // 오프셋이 제공되면 메모리 뷰에서 저장함을 의미
-    if (offset !== undefined) {
-        try {
-            const v = utils.resolve(i, 'ptr');
-            if (!v) return log.error(`sav(): 유효하지 않은 포인터 @ ${i}`);
-            
-            const baseAddr = v.address || v;
-            
-            // 실제 오프셋 계산
-            const lineOffset = Math.floor(offset / 16) * 16;
-            const byteOffset = offset % 16;
-            const targetAddr = baseAddr.add(lineOffset + byteOffset);
-            
-            // 특정 주소에 대한 새 로그 항목 생성
-            const ptr = {
-                index: global.state.lib.length,
-                label: `${utils.formatAddress(targetAddr)} (ptr from view offset ${offset})`,
-                value: { address: targetAddr, type: 'byte' },
-                type: 'ptr'
-            };
-            
-            global.state.lib.push(ptr);
-            log.success(`오프셋 ${offset}의 주소를 lib[${global.state.lib.length - 1}]로 저장했습니다`);
-            return;
-        } catch (e) {
-            log.error(`sav(): ${e}`);
-            return;
-        }
+// Filter logs by pattern
+function grep(pattern) {
+    if (!pattern || global.state.logs.length === 0) {
+        return log.error('No pattern provided or no logs to filter');
     }
     
-    // 로그 항목 저장을 위한 원래 동작
-    const l = global.state.logs[i];
-    if (!l) return log.error(`sav(): 유효하지 않은 로그 인덱스 ${i}`);
-    global.state.lib.push({ ...l });
-    log.success(`lib[${global.state.lib.length - 1}]로 저장했습니다`);
-}
-
-function sort() {
-    if (!global.state.logs.length) return log.error("sort(): 로그 없음");
-    const t = global.state.logs[0].type;
-    let sorted = [...global.state.logs];
-
     try {
-        if (t === 'class' || t === 'func' || t === 'method') {
-            sorted.sort((a, b) => a.label.localeCompare(b.label));
-        } else if (t === 'module') {
-            sorted.sort((a, b) => a.value.base.toString().localeCompare(b.value.base.toString()));
-        } else if (t === 'ptr') {
-            sorted.sort((a, b) => a.value.address.toString().localeCompare(b.value.address.toString()));
-        } else {
-            return log.error(`sort(): 지원되지 않는 타입 "${t}"`);
+        const regex = new RegExp(pattern, 'i');
+        const filtered = global.state.logs.filter(item => 
+            regex.test(JSON.stringify(item.label)) || 
+            regex.test(JSON.stringify(item.value))
+        );
+        
+        if (filtered.length === 0) {
+            log.info(`No items matching pattern "${pattern}"`);
+            return;
         }
-
-        global.state.logs.length = 0;
-        sorted.forEach((x, i) => {
-            x.index = i;
-            global.state.logs.push(x);
-        });
-
-        log.success(`${t} 기준으로 정렬됨`);
-        nxt(0);
+        
+        // Save original logs and replace with filtered results
+        global.state.originalLogs = global.state.logs;
+        global.state.logs = filtered;
+        global.state.logIndex = 0;
+        
+        log.success(`Found ${filtered.length} items matching pattern "${pattern}"`);
+        displayPage();
     } catch (e) {
-        log.error(`sort() 실패: ${e}`);
+        log.error(`Invalid regex pattern: ${e.message}`);
     }
 }
 
-function grep(pattern, options = {}) {
-    if (!global.state.logs.length) return log.error('grep: 검색할 로그가 없습니다');
+// Sort logs by field
+function sort(field = 'index') {
+    if (global.state.logs.length === 0) {
+        return log.error('No logs to sort');
+    }
     
-    const caseSensitive = options.caseSensitive !== undefined ? options.caseSensitive : false;
-    const matchField = options.field || 'label';
-    
-    try {
-        log.info(`grep: "${pattern}" ${caseSensitive ? '대소문자 구분' : '대소문자 구분 안함'} 검색 중...`);
-        
-        // 정규식 객체 생성
-        const regex = new RegExp(pattern, caseSensitive ? '' : 'i');
-        
-        // 검색 결과 저장
-        const searchResults = [];
-        
-        global.state.logs.forEach(item => {
-            const testValue = matchField === 'label' ? item.label : 
-                             (matchField === 'type' ? item.type : 
-                             (matchField === 'value' ? JSON.stringify(item.value) : item.label));
-            
-            if (regex.test(testValue)) {
-                searchResults.push({...item});
+    const fields = {
+        'index': (a, b) => a.index - b.index,
+        'value': (a, b) => {
+            const aVal = typeof a.value === 'object' ? JSON.stringify(a.value) : a.value;
+            const bVal = typeof b.value === 'object' ? JSON.stringify(b.value) : b.value;
+            return aVal.localeCompare(bVal);
+        },
+        'label': (a, b) => a.label.localeCompare(b.label),
+        'type': (a, b) => a.type.localeCompare(b.type),
+        'address': (a, b) => {
+            if (a.value && a.value.address && b.value && b.value.address) {
+                return a.value.address.compare(b.value.address);
             }
-        });
-        
-        if (searchResults.length === 0) {
-            log.info(`grep: 패턴 "${pattern}"에 대한 일치 항목이 없습니다`);
-            return;
+            return 0;
         }
-        
-        // 기존 로그 백업 (hist 모듈에 의존)
-        if (global.hist && global.hist.save) {
-            global.hist.save('Before grep search');
-        }
-        
-        // 검색 결과로 로그 업데이트
-        global.state.logs.length = 0;
-        searchResults.forEach((item, idx) => {
-            global.state.logs.push({
-                ...item,
-                index: idx
-            });
-        });
-        
-        log.success(`grep: ${searchResults.length}개의 일치 항목 발견`);
-        nxt(0);
-    } catch (e) {
-        if (e instanceof SyntaxError) {
-            log.error(`grep: 정규식 오류 - ${e.message}`);
-        } else {
-            log.error(`grep: ${e.message}`);
-        }
+    };
+    
+    const sortFn = fields[field] || fields.index;
+    global.state.logs.sort(sortFn);
+    
+    global.state.logIndex = 0;
+    log.success(`Sorted logs by ${field}`);
+    displayPage();
+}
+
+// Display current page of logs
+function displayPage() {
+    const s = config.pageSize;
+    const startIdx = global.state.logIndex;
+    const endIdx = Math.min(startIdx + s, global.state.logs.length);
+    
+    if (startIdx >= global.state.logs.length) {
+        log.error('Page index out of range');
+        global.state.logIndex = Math.max(0, global.state.logs.length - s);
+        return displayPage();
     }
+    
+    // Display log items
+    const items = global.state.logs.slice(startIdx, endIdx);
+    const table = items.map(item => {
+        let valueStr = '';
+        
+        if (item.type === 'ptr') {
+            valueStr = utils.formatAddress(item.value.address || item.value);
+        } else if (typeof item.value === 'object') {
+            valueStr = utils.truncate(JSON.stringify(item.value), 80);
+        } else {
+            valueStr = utils.truncate(String(item.value), 80);
+        }
+        
+        return `[${item.index}] ${item.label}: ${valueStr} (${item.type})`;
+    });
+    
+    console.log(table.join('\n'));
 }
 
 module.exports = {
     nxt,
     prv,
-    sav,
+    grep,
     sort,
-    grep
+    sav
 }; 

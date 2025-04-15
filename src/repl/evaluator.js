@@ -1,13 +1,13 @@
 /**
- * REPL 명령어 평가기
+ * REPL command evaluator
  */
 
 const repl = require('repl');
 
 /**
- * 명령어 평가기 생성
- * @param {any} script Frida 스크립트
- * @returns {Function} 명령어 평가 함수
+ * Create command evaluator
+ * @param {any} script Frida script
+ * @returns {Function} Command evaluation function
  */
 function createEvaluator(script) {
   return async function(cmd, context, filename, callback) {
@@ -17,7 +17,7 @@ function createEvaluator(script) {
       return callback(null);
     }
     
-    // 명령어 파싱 (따옴표 지원)
+    // Parse command (with quotes support)
     const parts = parseCommand(cmd);
     const command = parts[0];
     const args = parts.slice(1);
@@ -32,9 +32,9 @@ function createEvaluator(script) {
 }
 
 /**
- * 명령어 문자열을 파싱하여 인자 배열로 변환 (따옴표 내 공백 지원)
- * @param {string} cmdStr 명령어 문자열
- * @returns {string[]} 파싱된 인자 배열
+ * Parse command string into argument array (supports spaces inside quotes)
+ * @param {string} cmdStr Command string
+ * @returns {string[]} Parsed argument array
  */
 function parseCommand(cmdStr) {
   const result = [];
@@ -45,7 +45,7 @@ function parseCommand(cmdStr) {
   for (let i = 0; i < cmdStr.length; i++) {
     const char = cmdStr[i];
     
-    // 따옴표 처리
+    // Handle quotes
     if ((char === '"' || char === "'") && (i === 0 || cmdStr[i-1] !== '\\')) {
       if (!inQuotes) {
         inQuotes = true;
@@ -58,7 +58,7 @@ function parseCommand(cmdStr) {
       continue;
     }
     
-    // 공백 처리
+    // Handle spaces
     if (char === ' ' && !inQuotes) {
       if (current) {
         result.push(current);
@@ -78,18 +78,18 @@ function parseCommand(cmdStr) {
 }
 
 /**
- * 16진수 주소 문자열인지 확인
- * @param {string} str 확인할 문자열
- * @returns {boolean} 16진수 주소 여부
+ * Check if string is a hexadecimal address
+ * @param {string} str String to check
+ * @returns {boolean} Whether it's a hex address
  */
 function isHexAddress(str) {
   return /^0x[0-9a-fA-F]+$/.test(str);
 }
 
 /**
- * 16진수 주소 문자열을 ptr() 호출로 변환
- * @param {string} addr 16진수 주소 문자열
- * @returns {string} 변환된 JS 코드
+ * Convert hexadecimal address string to ptr() call
+ * @param {string} addr Hexadecimal address string
+ * @returns {string} Converted JS code
  */
 function convertHexAddress(addr) {
   if (isHexAddress(addr)) {
@@ -99,17 +99,17 @@ function convertHexAddress(addr) {
 }
 
 /**
- * 명령어 실행
- * @param {any} script Frida 스크립트
- * @param {string} cmd 명령어
- * @param {string[]} args 명령어 인자
+ * Execute command
+ * @param {any} script Frida script
+ * @param {string} cmd Command
+ * @param {string[]} args Command arguments
  */
 async function executeCommand(script, cmd, args) {
   try {
     let jsCode = '';
     
     switch(cmd) {
-      // 기본 명령어
+      // Basic commands
       case 'help':
         if (args.length === 0) {
           showHelp();
@@ -118,11 +118,11 @@ async function executeCommand(script, cmd, args) {
         jsCode = `help(${JSON.stringify(args[0])})`;
         break;
         
-      // 목록 명령어
+      // List commands
       case 'list':
         if (args.length === 0) {
-          console.error('사용법: list <type> [pattern]');
-          console.error('타입: class, method, module, export');
+          console.error('Usage: list <type> [pattern]');
+          console.error('Types: class, method, module, export');
           return;
         }
         
@@ -131,36 +131,36 @@ async function executeCommand(script, cmd, args) {
         
         switch(listType) {
           case 'class':
-            jsCode = `clss(${listArgs.length > 0 ? JSON.stringify(listArgs[0]) : ''})`;
+            jsCode = `list.class(${listArgs.length > 0 ? JSON.stringify(listArgs[0]) : ''})`;
             break;
           case 'method':
             if (listArgs.length === 0) {
-              console.error('사용법: list method <class> [pattern]');
+              console.error('Usage: list method <class> [pattern]');
               return;
             }
-            jsCode = `meths(${JSON.stringify(listArgs[0])}, ${listArgs.length > 1 ? JSON.stringify(listArgs[1]) : ''})`;
+            jsCode = `list.method(${JSON.stringify(listArgs[0])}, ${listArgs.length > 1 ? JSON.stringify(listArgs[1]) : ''})`;
             break;
           case 'module':
-            jsCode = `modls(${listArgs.length > 0 ? JSON.stringify(listArgs[0]) : ''})`;
+            jsCode = `list.module(${listArgs.length > 0 ? JSON.stringify(listArgs[0]) : ''})`;
             break;
           case 'export':
             if (listArgs.length === 0) {
-              console.error('사용법: list export <module> [pattern]');
+              console.error('Usage: list export <module> [pattern]');
               return;
             }
-            jsCode = `exps(${JSON.stringify(listArgs[0])}, ${listArgs.length > 1 ? JSON.stringify(listArgs[1]) : ''})`;
+            jsCode = `list.export(${JSON.stringify(listArgs[0])}, ${listArgs.length > 1 ? JSON.stringify(listArgs[1]) : ''})`;
             break;
           default:
-            console.error(`알 수 없는 목록 유형: ${listType}`);
+            console.error(`Unknown list type: ${listType}`);
             return;
         }
         break;
         
-      // 메모리 조작 명령어
+      // Memory manipulation commands
       case 'mem':
         if (args.length < 2) {
-          console.error('사용법: mem <동작> [인수...]');
-          console.error('동작 목록: read, write, view, lock, unlock, list, watch, unwatch, trace, untrace');
+          console.error('Usage: mem <action> [args...]');
+          console.error('Actions: read, write, view, lock, unlock, list, watch, unwatch, trace, untrace');
           return;
         }
         
@@ -169,34 +169,34 @@ async function executeCommand(script, cmd, args) {
         switch(action) {
           case 'read':
             if (args.length === 0) {
-              console.error('사용법: mem read <address> [type]');
+              console.error('Usage: mem read <address> [type]');
               return;
             }
-            // 16진수 주소 처리
+            // Handle hex address
             const addrRead = isHexAddress(args[0]) ? convertHexAddress(args[0]) : JSON.stringify(args[0]);
             jsCode = `mem.read(${addrRead}, ${args.length > 1 ? JSON.stringify(args[1]) : ''})`;
             break;
           case 'write':
             if (args.length < 2) {
-              console.error('사용법: mem write <address> <value> [type]');
+              console.error('Usage: mem write <address> <value> [type]');
               return;
             }
-            // 16진수 주소 처리
+            // Handle hex address
             const addrWrite = isHexAddress(args[0]) ? convertHexAddress(args[0]) : JSON.stringify(args[0]);
             jsCode = `mem.write(${addrWrite}, ${JSON.stringify(args[1])}, ${args.length > 2 ? JSON.stringify(args[2]) : ''})`;
             break;
           case 'view':
             if (args.length === 0) {
-              console.error('사용법: mem view <address> [type] [lines]');
+              console.error('Usage: mem view <address> [type] [lines]');
               return;
             }
-            // 16진수 주소 처리
+            // Handle hex address
             const addrView = isHexAddress(args[0]) ? convertHexAddress(args[0]) : JSON.stringify(args[0]);
             jsCode = `mem.view(${addrView}, ${args.length > 1 ? JSON.stringify(args[1]) : ''}, ${args.length > 2 ? args[2] : ''})`;
             break;
           case 'lock':
             if (args.length < 4) {
-              console.error('사용법: mem lock <주소> <값> [타입]');
+              console.error('Usage: mem lock <address> <value> [type]');
               return;
             }
             const addr = args[2];
@@ -207,7 +207,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'unlock':
             if (args.length < 3) {
-              console.error('사용법: mem unlock <id>');
+              console.error('Usage: mem unlock <id>');
               return;
             }
             const id = parseInt(args[2]);
@@ -215,7 +215,7 @@ async function executeCommand(script, cmd, args) {
             jsCode = `mem.unlock(${id})`;
             break;
           case 'locked':
-            console.info('mem locked는 mem list로 변경되었습니다. 향후 mem list를 사용하세요.');
+            console.info('mem locked is now mem list. Please use mem list from now on.');
             jsCode = `mem.list()`;
             break;
           case 'list':
@@ -223,7 +223,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'trace':
             if (args.length < 3) {
-              console.error('사용법: mem trace <주소> [타입]');
+              console.error('Usage: mem trace <address> [type]');
               return;
             }
             const addrTrace = isHexAddress(args[2]) ? convertHexAddress(args[2]) : JSON.stringify(args[2]);
@@ -231,7 +231,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'untrace':
             if (args.length < 3) {
-              console.error('사용법: mem untrace <id>');
+              console.error('Usage: mem untrace <id>');
               return;
             }
             const idTrace = parseInt(args[2]);
@@ -240,7 +240,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'watch':
             if (args.length < 3) {
-              console.error('사용법: mem watch <주소> [타입]');
+              console.error('Usage: mem watch <address> [type]');
               return;
             }
             const addrWatch = isHexAddress(args[2]) ? convertHexAddress(args[2]) : JSON.stringify(args[2]);
@@ -248,7 +248,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'unwatch':
             if (args.length < 3) {
-              console.error('사용법: mem unwatch <id>');
+              console.error('Usage: mem unwatch <id>');
               return;
             }
             const idWatch = parseInt(args[2]);
@@ -256,17 +256,17 @@ async function executeCommand(script, cmd, args) {
             jsCode = `mem.unwatch(${idWatch})`;
             break;
           default:
-            console.error(`알 수 없는 mem 동작: ${action}`);
-            console.error('동작 목록: read, write, view, lock, unlock, list, watch, unwatch, trace, untrace');
+            console.error(`Unknown mem action: ${action}`);
+            console.error('Actions: read, write, view, list, lock, unlock, watch, unwatch, trace, untrace');
             return;
         }
         break;
         
-      // 스캔 명령어  
+      // Scan commands
       case 'scan':
         if (args.length === 0) {
-          console.error('사용법: scan <action> [args...]');
-          console.error('액션: type, value, range, increased, decreased, next');
+          console.error('Usage: scan <action> [args...]');
+          console.error('Actions: type, value, range, increased, decreased, next');
           return;
         }
         
@@ -276,17 +276,17 @@ async function executeCommand(script, cmd, args) {
         switch(scanAction) {
           case 'type':
             if (scanArgs.length === 0) {
-              console.error('사용법: scan type <value> [type] [protection]');
+              console.error('Usage: scan type <value> [type] [protection]');
               return;
             }
             
-            // 값 처리 (숫자나 문자열)
+            // Handle value (number or string)
             let scanValue;
             if (!isNaN(Number(scanArgs[0]))) {
-              // 숫자 처리
+              // Handle number
               scanValue = scanArgs[0];
             } else {
-              // 문자열 처리
+              // Handle string
               scanValue = JSON.stringify(scanArgs[0]);
             }
             
@@ -297,10 +297,10 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'value':
             if (scanArgs.length === 0) {
-              console.error('사용법: scan value <value> [type]');
+              console.error('Usage: scan value <value> [type]');
               return;
             }
-            // 값 처리 (숫자나 문자열)
+            // Handle value (number or string)
             let exactValue;
             if (!isNaN(Number(scanArgs[0]))) {
               exactValue = scanArgs[0];
@@ -312,7 +312,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'range':
             if (scanArgs.length < 2) {
-              console.error('사용법: scan range <min> <max> [type]');
+              console.error('Usage: scan range <min> <max> [type]');
               return;
             }
             jsCode = `scan.range(${scanArgs[0]}, ${scanArgs[1]}, ${scanArgs.length > 2 ? JSON.stringify(scanArgs[2]) : ''})`;
@@ -325,22 +325,22 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'next':
             if (scanArgs.length === 0) {
-              console.error('사용법: scan next <condition> [type]');
+              console.error('Usage: scan next <condition> [type]');
               return;
             }
-            console.error('scan next 명령은 아직 CLI에서 지원되지 않습니다. scan.next() 함수를 직접 사용하세요.');
+            console.error('scan next command is not supported in CLI. Please use scan.next() function directly.');
             return;
           default:
-            console.error(`알 수 없는 스캔 액션: ${scanAction}`);
+            console.error(`Unknown scan action: ${scanAction}`);
             return;
         }
         break;
         
-      // 후킹 명령어
+      // Hook commands
       case 'hook':
         if (args.length === 0) {
-          console.error('사용법: hook <action> [args...]');
-          console.error('액션: method, native, list, unhook');
+          console.error('Usage: hook <action> [args...]');
+          console.error('Actions: method, native, list, unhook');
           return;
         }
         
@@ -350,17 +350,17 @@ async function executeCommand(script, cmd, args) {
         switch(hookAction) {
           case 'method':
             if (hookArgs.length === 0) {
-              console.error('사용법: hook method <class.method>');
+              console.error('Usage: hook method <class.method>');
               return;
             }
             jsCode = `hook.method(${JSON.stringify(hookArgs[0])})`;
             break;
           case 'native':
             if (hookArgs.length === 0) {
-              console.error('사용법: hook native <function>');
+              console.error('Usage: hook native <function>');
               return;
             }
-            // 16진수 주소 처리
+            // Handle hex address
             const hookNativeArg = isHexAddress(hookArgs[0]) ? convertHexAddress(hookArgs[0]) : JSON.stringify(hookArgs[0]);
             jsCode = `hook.native(${hookNativeArg})`;
             break;
@@ -369,22 +369,22 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'unhook':
             if (hookArgs.length === 0) {
-              console.error('사용법: hook unhook <index>');
+              console.error('Usage: hook unhook <index>');
               return;
             }
             jsCode = `hook.unhook(${JSON.stringify(hookArgs[0])})`;
             break;
           default:
-            console.error(`알 수 없는 후킹 액션: ${hookAction}`);
+            console.error(`Unknown hook action: ${hookAction}`);
             return;
         }
         break;
         
-      // 함수 호출 명령어
+      // Call commands
       case 'call':
         if (args.length === 0) {
-          console.error('사용법: call <action> [args...]');
-          console.error('액션: native, method');
+          console.error('Usage: call <action> [args...]');
+          console.error('Actions: native, method');
           return;
         }
         
@@ -394,13 +394,13 @@ async function executeCommand(script, cmd, args) {
         switch(callAction) {
           case 'native':
             if (callArgs.length === 0) {
-              console.error('사용법: call native <function> [args...]');
+              console.error('Usage: call native <function> [args...]');
               return;
             }
-            // 16진수 주소 처리
+            // Handle hex address
             const callNativeArg = isHexAddress(callArgs[0]) ? convertHexAddress(callArgs[0]) : JSON.stringify(callArgs[0]);
             jsCode = `call.native(${callNativeArg}, ${callArgs.slice(1).map(arg => {
-              // 숫자나 16진수 주소는 따옴표 없이
+              // Numbers or hex addresses are not quoted
               if (!isNaN(Number(arg)) || isHexAddress(arg)) {
                 return isHexAddress(arg) ? convertHexAddress(arg) : arg;
               }
@@ -409,11 +409,11 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'method':
             if (callArgs.length < 2) {
-              console.error('사용법: call method <class.method> <overloadIndex> [args...]');
+              console.error('Usage: call method <class.method> <overloadIndex> [args...]');
               return;
             }
             jsCode = `call.method(${JSON.stringify(callArgs[0])}, ${callArgs[1]}, ${callArgs.slice(2).map(arg => {
-              // 숫자는 따옴표 없이
+              // Numbers are not quoted
               if (!isNaN(Number(arg))) {
                 return arg;
               }
@@ -421,16 +421,16 @@ async function executeCommand(script, cmd, args) {
             }).join(', ')})`;
             break;
           default:
-            console.error(`알 수 없는 호출 액션: ${callAction}`);
+            console.error(`Unknown call action: ${callAction}`);
             return;
         }
         break;
         
-      // 히스토리 명령어
+      // History commands
       case 'hist':
         if (args.length === 0) {
-          console.error('사용법: hist <action> [args...]');
-          console.error('액션: save, list, load, clear, compare');
+          console.error('Usage: hist <action> [args...]');
+          console.error('Actions: save, list, load, clear, compare');
           return;
         }
         
@@ -446,7 +446,7 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'load':
             if (histArgs.length === 0) {
-              console.error('사용법: hist load <index>');
+              console.error('Usage: hist load <index>');
               return;
             }
             jsCode = `hist.load(${histArgs[0]})`;
@@ -456,22 +456,22 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'compare':
             if (histArgs.length < 2) {
-              console.error('사용법: hist compare <index1> <index2>');
+              console.error('Usage: hist compare <index1> <index2>');
               return;
             }
             jsCode = `hist.compare(${histArgs[0]}, ${histArgs[1]})`;
             break;
           default:
-            console.error(`알 수 없는 히스토리 액션: ${histAction}`);
+            console.error(`Unknown history action: ${histAction}`);
             return;
         }
         break;
         
-      // 라이브러리 명령어
+      // Library commands
       case 'lib':
         if (args.length === 0) {
-          console.error('사용법: lib <action> [args...]');
-          console.error('액션: list, save, clear, remove, move, sort, find, export, duplicate');
+          console.error('Usage: lib <action> [args...]');
+          console.error('Actions: list, save, clear, remove, move, sort, find, export, duplicate');
           return;
         }
         
@@ -484,24 +484,24 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'save':
             if (libArgs.length === 0) {
-              console.error('사용법: lib save <index> [label]');
+              console.error('Usage: lib save <index> [label]');
               return;
             }
-            jsCode = `sav(${libArgs[0]}, ${libArgs.length > 1 ? JSON.stringify(libArgs[1]) : ''})`;
+            jsCode = `lib.save(${libArgs[0]}, ${libArgs.length > 1 ? JSON.stringify(libArgs[1]) : ''})`;
             break;
           case 'clear':
             jsCode = `lib.clear()`;
             break;
           case 'remove':
             if (libArgs.length === 0) {
-              console.error('사용법: lib remove <index>');
+              console.error('Usage: lib remove <index>');
               return;
             }
             jsCode = `lib.remove(${libArgs[0]})`;
             break;
           case 'move':
             if (libArgs.length < 2) {
-              console.error('사용법: lib move <fromIndex> <toIndex>');
+              console.error('Usage: lib move <fromIndex> <toIndex>');
               return;
             }
             jsCode = `lib.move(${libArgs[0]}, ${libArgs[1]})`;
@@ -511,36 +511,36 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'find':
             if (libArgs.length === 0) {
-              console.error('사용법: lib find <pattern> [field]');
+              console.error('Usage: lib find <pattern> [field]');
               return;
             }
             jsCode = `lib.find(${JSON.stringify(libArgs[0])}, ${libArgs.length > 1 ? JSON.stringify(libArgs[1]) : ''})`;
             break;
           case 'export':
             if (libArgs.length === 0) {
-              console.error('사용법: lib export <index>');
+              console.error('Usage: lib export <index>');
               return;
             }
             jsCode = `lib.export(${libArgs[0]})`;
             break;
           case 'duplicate':
             if (libArgs.length === 0) {
-              console.error('사용법: lib duplicate <index>');
+              console.error('Usage: lib duplicate <index>');
               return;
             }
             jsCode = `lib.duplicate(${libArgs[0]})`;
             break;
           default:
-            console.error(`알 수 없는 라이브러리 액션: ${libAction}`);
+            console.error(`Unknown library action: ${libAction}`);
             return;
         }
         break;
         
-      // 명령어 관리
+      // Command management commands
       case 'cmd':
         if (args.length === 0) {
-          console.error('사용법: cmd <action> [args...]');
-          console.error('액션: history, alias');
+          console.error('Usage: cmd <action> [args...]');
+          console.error('Actions: history, alias');
           return;
         }
         
@@ -553,18 +553,18 @@ async function executeCommand(script, cmd, args) {
             break;
           case 'alias':
             if (cmdArgs.length < 2) {
-              console.error('사용법: cmd alias <name> <command>');
+              console.error('Usage: cmd alias <name> <command>');
               return;
             }
             jsCode = `cmd.alias(${JSON.stringify(cmdArgs[0])}, ${JSON.stringify(cmdArgs.slice(1).join(' '))})`;
             break;
           default:
-            console.error(`알 수 없는 명령어 액션: ${cmdAction}`);
+            console.error(`Unknown command action: ${cmdAction}`);
             return;
         }
         break;
         
-      // 내비게이션 명령어
+      // Navigation commands
       case 'nxt':
         jsCode = `nxt(${args.length > 0 ? args[0] : ''})`;
         break;
@@ -573,19 +573,26 @@ async function executeCommand(script, cmd, args) {
         break;
       case 'grep':
         if (args.length === 0) {
-          console.error('사용법: grep <pattern>');
+          console.error('Usage: grep <pattern>');
           return;
         }
         jsCode = `grep(${JSON.stringify(args[0])})`;
+        break;
+      case 'sav':
+        if (args.length === 0) {
+          console.error('Usage: sav <index>');
+          return;
+        }
+        jsCode = `sav(${JSON.stringify(args[0])})`;
         break;
       case 'sort':
         jsCode = `sort(${args.length > 0 ? JSON.stringify(args[0]) : ''})`;
         break;
         
-      // 알 수 없는 명령어
+      // Unknown command
       default:
-        console.error(`알 수 없는 명령어: ${cmd}`);
-        console.error('도움말을 보려면 help를 입력하세요.');
+        console.error(`Unknown command: ${cmd}`);
+        console.error('Type help for help.');
         return;
     }
     
@@ -593,72 +600,73 @@ async function executeCommand(script, cmd, args) {
       await script.exports.executeCommand(jsCode);
     }
   } catch (e) {
-    console.error(`명령어 실행 오류: ${e.message}`);
+    console.error(`Command execution error: ${e.message}`);
     throw e;
   }
 }
 
 /**
- * 도움말 표시
+ * Show help
  */
 function showHelp() {
-  console.log('사용 가능한 명령어:');
-  console.log('  help                        - 이 도움말을 표시합니다');
-  console.log('  list class [pattern]        - 클래스 목록을 표시합니다');
-  console.log('  list method <class> [p]     - 클래스의 메소드 목록을 표시합니다');
-  console.log('  list module [pattern]       - 모듈 목록을 표시합니다');
-  console.log('  list export <mod> [p]       - 모듈의 내보내기 목록을 표시합니다');
+  console.log('Available commands:');
+  console.log('  help                        - Show this help');
+  console.log('  list class [pattern]        - Show class list');
+  console.log('  list method <class> [p]     - Show method list of class');
+  console.log('  list module [pattern]       - Show module list');
+  console.log('  list export <mod> [p]       - Show export list of module');
   console.log('');
-  console.log('  mem read <address> [type]   - 메모리 주소의 값을 읽습니다');
-  console.log('  mem write <addr> <val> [t]  - 메모리 주소에 값을 씁니다');
-  console.log('  mem view <addr> [t] [lines] - 메모리 주소를 검사합니다');
-  console.log('  mem lock <addr> <val> [t]   - 메모리 주소의 값을 고정합니다');
-  console.log('  mem unlock <index>          - 메모리 주소의 잠금을 해제합니다');
-  console.log('  mem locked                  - 잠긴 메모리 목록을 표시합니다');
-  console.log('  mem trace <addr> [type]     - 메모리 주소의 접근을 추적합니다');
+  console.log('  mem read <address> [type]   - Read value of memory address');
+  console.log('  mem write <addr> <val> [t]  - Write value to memory address');
+  console.log('  mem view <addr> [t] [lines] - View memory address');
+  console.log('  mem lock <addr> <val> [t]   - Lock value of memory address');
+  console.log('  mem unlock <index>          - Unlock memory address');
+  console.log('  mem locked                  - Show locked memory list');
+  console.log('  mem trace <addr> [type]     - Trace access to memory address');
   console.log('');
-  console.log('  scan type <val> [t] [prot]  - 메모리에서 값을 검색합니다');
-  console.log('  scan value <val> [type]     - 특정 값을 검색합니다');
-  console.log('  scan range <min> <max> [t]  - 범위 내 값을 검색합니다');
-  console.log('  scan increased [type]       - 증가된 값을 검색합니다');
-  console.log('  scan decreased [type]       - 감소된 값을 검색합니다');
+  console.log('  scan type <val> [t] [prot]  - Scan value in memory');
+  console.log('  scan value <val> [type]     - Scan specific value');
+  console.log('  scan range <min> <max> [t]  - Scan values in range');
+  console.log('  scan increased [type]       - Scan increased values');
+  console.log('  scan decreased [type]       - Scan decreased values');
   console.log('');
-  console.log('  hook method <class.method>  - 자바 메소드를 후킹합니다');
-  console.log('  hook native <func>          - 네이티브 함수를 후킹합니다');
-  console.log('  hook list                   - 후킹된 함수 목록을 표시합니다');
-  console.log('  hook unhook <index>         - 후킹을 제거합니다');
+  console.log('  hook method <class.method>  - Hook Java method');
+  console.log('  hook native <func>          - Hook native function');
+  console.log('  hook list                   - Show hooked function list');
+  console.log('  hook unhook <index>         - Remove hook');
   console.log('');
-  console.log('  call native <func> [args]   - 네이티브 함수를 호출합니다');
-  console.log('  call method <m> <idx> [a]   - 자바 메소드를 호출합니다');
+  console.log('  call native <func> [args]   - Call native function');
+  console.log('  call method <m> <idx> [a]   - Call Java method');
   console.log('');
-  console.log('  hist save [label]           - 현재 로그를 저장합니다');
-  console.log('  hist list                   - 저장된 로그 목록을 표시합니다');
-  console.log('  hist load <index>           - 저장된 로그를 로드합니다');
-  console.log('  hist clear                  - 모든 저장된 로그를 지웁니다');
-  console.log('  hist compare <idx1> <idx2>  - 두 로그를 비교합니다');
+  console.log('  hist save [label]           - Save current log');
+  console.log('  hist list                   - Show saved log list');
+  console.log('  hist load <index>           - Load saved log');
+  console.log('  hist clear                  - Clear all saved logs');
+  console.log('  hist compare <idx1> <idx2>  - Compare two logs');
   console.log('');
-  console.log('  lib list [page]             - 라이브러리 항목을 표시합니다');
-  console.log('  lib save <index> [label]    - 로그 항목을 라이브러리에 저장합니다');
-  console.log('  lib clear                   - 라이브러리를 비웁니다');
-  console.log('  lib remove <index>          - 라이브러리 항목을 제거합니다');
-  console.log('  lib move <from> <to>        - 라이브러리 항목을 이동합니다');
-  console.log('  lib sort [field]            - 라이브러리 항목을 정렬합니다');
-  console.log('  lib find <pattern> [field]  - 라이브러리 항목을 검색합니다');
-  console.log('  lib export <index>          - 라이브러리 항목을 로그로 내보냅니다');
-  console.log('  lib duplicate <index>       - 라이브러리 항목을 복제합니다');
+  console.log('  lib list [page]             - Show library item');
+  console.log('  lib save <index> [label]    - Save log item to library');
+  console.log('  lib clear                   - Clear library');
+  console.log('  lib remove <index>          - Remove library item');
+  console.log('  lib move <from> <to>        - Move library item');
+  console.log('  lib sort [field]            - Sort library item');
+  console.log('  lib find <pattern> [field]  - Find library item');
+  console.log('  lib export <index>          - Export library item to log');
+  console.log('  lib duplicate <index>       - Duplicate library item');
   console.log('');
-  console.log('  cmd history                 - 명령어 기록을 표시합니다');
-  console.log('  cmd alias <name> <command>  - 명령어 별칭을 생성합니다');
+  console.log('  cmd history                 - Show command history');
+  console.log('  cmd alias <name> <command>  - Create command alias');
   console.log('');
-  console.log('  nxt [page]                  - 다음 페이지로 이동합니다');
-  console.log('  prv [page]                  - 이전 페이지로 이동합니다');
-  console.log('  grep <pattern>              - 현재 로그에서 패턴을 검색합니다');
-  console.log('  sort [field]                - 현재 로그를 정렬합니다');
+  console.log('  nxt [page]                  - Move to next page');
+  console.log('  prv [page]                  - Move to previous page');
+  console.log('  grep <pattern>              - Search pattern in current log');
+  console.log('  sav <index> [label]         - Save log item to library');
+  console.log('  sort [field]                - Sort current log');
   console.log('');
-  console.log('  exit                        - REPL 세션을 종료합니다');
+  console.log('  exit                        - Exit REPL session');
   console.log('');
-  console.log('참고: "값" 처럼 공백이 포함된 인자는 따옴표로 묶어서 사용하세요.');
-  console.log('      0x로 시작하는 16진수 주소값은 직접 입력할 수 있습니다. (예: 0x7ff8ad83b0)');
+  console.log('Note: "value" as argument should be quoted if it contains spaces. (e.g., "value 1")');
+  console.log('      Hexadecimal address values starting with 0x can be entered directly. (e.g., 0x7ff8ad83b0)');
 }
 
 module.exports = {

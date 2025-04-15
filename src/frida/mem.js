@@ -26,10 +26,10 @@ const mem = {
         try {
             const memory = require('./memory');
             const val = memory.reader[type](addr);
-            log.info(`메모리 읽기: [${utils.formatAddress(addr)}] (${type}) = ${val}`);
+            log.info(`Memory read: [${utils.formatAddress(addr)}] (${type}) = ${val}`);
             return val;
         } catch (e) {
-            log.error(`mem.read() 오류: ${e}`);
+            log.error(`mem.read() error: ${e}`);
         }
     },
 
@@ -42,9 +42,9 @@ const mem = {
             const memory = require('./memory');
             const oldVal = memory.reader[type](addr);
             memory.writer[type](addr, val);
-            log.success(`메모리 쓰기 완료: ${utils.formatAddress(addr)} (${type}) [${oldVal} → ${val}]`);
+            log.success(`Memory write completed: ${utils.formatAddress(addr)} (${type}) [${oldVal} → ${val}]`);
         } catch (e) {
-            log.error(`mem.write() 오류: ${e}`);
+            log.error(`mem.write() error: ${e}`);
         }
     },
 
@@ -59,7 +59,7 @@ const mem = {
             const startOffset = lines < 0 ? -16 * absLines : 0;
             const totalLines = lines < 0 ? absLines * 2 : absLines;
             
-            log.info(`메모리 주소 ${utils.formatAddress(baseAddr.add(startOffset))} 에서 ${totalLines}줄 보기 (타입: ${t})`);
+            log.info(`Viewing memory at address ${utils.formatAddress(baseAddr.add(startOffset))} for ${totalLines} lines (type: ${t})`);
             
             // Print header
             console.log('                      0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F');
@@ -134,15 +134,15 @@ const mem = {
             
             return baseAddr;
         } catch (e) {
-            log.error(`mem.view() 오류: ${e}`);
+            log.error(`mem.view() error: ${e}`);
         }
     },
 
     /**
-     * 메모리 주소를 잠가서 지정한 값으로 유지합니다.
-     * @param {string|number} address 16진수 문자열 또는 숫자 주소
-     * @param {any} value 유지할 값
-     * @param {string} type 데이터 타입 (기본값: 'int')
+     * Lock a memory address to maintain a specific value
+     * @param {string|number} address Hexadecimal string or numeric address
+     * @param {any} value Value to maintain
+     * @param {string} type Data type (default: 'int')
      */
     lock(address, value, type = 'int') {
         const parsedAddr = typeof address === 'string' ? 
@@ -152,15 +152,15 @@ const mem = {
         const id = lockCounter++;
         lockIndex.push(id);
         
-        // 초기 값 쓰기
+        // Write initial value
         this.write(parsedAddr, value, type);
         
-        // 인터벌 설정
+        // Set interval
         const intervalId = setInterval(() => {
             try {
                 this.write(parsedAddr, value, type);
             } catch (e) {
-                console.error(`Lock ${id} 오류: ${e.message}`);
+                console.error(`Lock ${id} error: ${e.message}`);
                 this.unlock(id);
             }
         }, 100);
@@ -174,17 +174,17 @@ const mem = {
             createdAt: new Date()
         };
         
-        console.log(`메모리 잠금 설정됨 #${id}: ${parsedAddr} = ${value} (${type})`);
+        console.log(`Memory lock set #${id}: ${parsedAddr} = ${value} (${type})`);
         return id;
     },
     
     /**
-     * 메모리 잠금을 해제합니다.
-     * @param {number} id 잠금 ID
+     * Unlock a memory lock
+     * @param {number} id Lock ID
      */
     unlock(id) {
         if (!locks[id]) {
-            console.error(`ID ${id}에 대한 잠금을 찾을 수 없습니다.`);
+            console.error(`No lock found for ID ${id}`);
             return false;
         }
         
@@ -198,37 +198,37 @@ const mem = {
         const lock = locks[id];
         delete locks[id];
         
-        console.log(`메모리 잠금 해제됨 #${id}: ${lock.address}`);
+        console.log(`Memory lock released #${id}: ${lock.address}`);
         return true;
     },
 
     /**
-     * 모든 잠금 목록을 표시합니다.
+     * Display all memory locks
      */
     list() {
-        console.log('\n----- 메모리 감시 목록 -----');
+        console.log('\n----- Memory watch list -----');
         
-        // 잠금 목록 표시
+        // Display lock list
         if (lockIndex.length > 0) {
-            console.log('\n[잠금 목록]');
+            console.log('\n[Lock list]');
             for (const id of lockIndex) {
                 const lock = locks[id];
                 console.log(`#${id}: ${lock.address} = ${lock.value} (${lock.type}) - ${formatTime(lock.createdAt)}`);
             }
         }
         
-        // 추적 목록 표시
+        // Display trace list
         if (traceIndex.length > 0) {
-            console.log('\n[추적 목록]');
+            console.log('\n[Trace list]');
             for (const id of traceIndex) {
                 const trace = traces[id];
                 console.log(`#${id}: ${trace.address} (${trace.type}) - ${formatTime(trace.createdAt)}`);
             }
         }
         
-        // 감시 목록 표시
+        // Display watch list
         if (watchIndex.length > 0) {
-            console.log('\n[감시 목록]');
+            console.log('\n[Watch list]');
             for (const id of watchIndex) {
                 const watch = watches[id];
                 console.log(`#${id}: ${watch.address} (${watch.type}) - ${formatTime(watch.createdAt)}`);
@@ -236,23 +236,16 @@ const mem = {
         }
         
         if (lockIndex.length === 0 && traceIndex.length === 0 && watchIndex.length === 0) {
-            console.log('활성화된 메모리 감시가 없습니다.');
+            console.log('No active memory watch.');
         }
         
         console.log('\n-------------------------');
     },
-    
-    /**
-     * 이전 버전과의 호환성을 위한 alias
-     */
-    locked() {
-        return this.list();
-    },
 
     /**
-     * 메모리 주소를 추적합니다.
-     * @param {string|number} address 16진수 문자열 또는 숫자 주소
-     * @param {string} type 데이터 타입 (기본값: 'int')
+     * Track a memory address
+     * @param {string|number} address Hexadecimal string or numeric address
+     * @param {string} type Data type (default: 'int')
      */
     trace(address, type = 'int') {
         const parsedAddr = typeof address === 'string' ? 
@@ -262,25 +255,25 @@ const mem = {
         const id = traceCounter++;
         traceIndex.push(id);
         
-        // 초기 값 읽기
+        // Read initial value
         let prevValue;
         try {
             prevValue = this.read(parsedAddr, type);
         } catch (e) {
-            console.error(`초기 값 읽기 오류: ${e.message}`);
+            console.error(`Error reading initial value: ${e.message}`);
             prevValue = null;
         }
         
-        // 인터벌 설정
+        // Set interval
         const intervalId = setInterval(() => {
             try {
                 const currentValue = this.read(parsedAddr, type);
                 if (JSON.stringify(currentValue) !== JSON.stringify(prevValue)) {
-                    console.log(`[Trace #${id}] ${parsedAddr} 변경됨: ${prevValue} → ${currentValue}`);
+                    console.log(`[Trace #${id}] ${parsedAddr} changed: ${prevValue} → ${currentValue}`);
                     prevValue = currentValue;
                 }
             } catch (e) {
-                console.error(`Trace ${id} 오류: ${e.message}`);
+                console.error(`Trace ${id} error: ${e.message}`);
                 this.untrace(id);
             }
         }, 100);
@@ -293,17 +286,17 @@ const mem = {
             createdAt: new Date()
         };
         
-        console.log(`메모리 추적 설정됨 #${id}: ${parsedAddr} (${type})`);
+        console.log(`Memory trace set #${id}: ${parsedAddr} (${type})`);
         return id;
     },
     
     /**
-     * 메모리 추적을 중지합니다.
-     * @param {number} id 추적 ID
+     * Stop tracking a memory address
+     * @param {number} id Trace ID
      */
     untrace(id) {
         if (!traces[id]) {
-            console.error(`ID ${id}에 대한 추적을 찾을 수 없습니다.`);
+            console.error(`No trace found for ID ${id}`);
             return false;
         }
         
@@ -317,14 +310,14 @@ const mem = {
         const trace = traces[id];
         delete traces[id];
         
-        console.log(`메모리 추적 중지됨 #${id}: ${trace.address}`);
+        console.log(`Memory trace stopped #${id}: ${trace.address}`);
         return true;
     },
     
     /**
-     * 메모리 주소의 값 변경을 감시합니다.
-     * @param {string|number} address 16진수 문자열 또는 숫자 주소
-     * @param {string} type 데이터 타입 (기본값: 'int')
+     * Watch for value changes in a memory address
+     * @param {string|number} address Hexadecimal string or numeric address
+     * @param {string} type Data type (default: 'int')
      */
     watch(address, type = 'int') {
         const parsedAddr = typeof address === 'string' ? 
@@ -334,19 +327,19 @@ const mem = {
         const id = watchCounter++;
         watchIndex.push(id);
         
-        // 초기 값 읽기
+        // Read initial value
         let prevValue;
         try {
             prevValue = this.read(parsedAddr, type);
         } catch (e) {
-            console.error(`초기 값 읽기 오류: ${e.message}`);
+            console.error(`Error reading initial value: ${e.message}`);
             prevValue = null;
         }
         
-        // 변경 기록
+        // Change record
         const changes = [];
         
-        // 인터벌 설정
+        // Set interval
         const intervalId = setInterval(() => {
             try {
                 const currentValue = this.read(parsedAddr, type);
@@ -358,11 +351,11 @@ const mem = {
                         to: currentValue
                     };
                     changes.push(change);
-                    console.log(`[Watch #${id}] ${parsedAddr} 변경됨: ${prevValue} → ${currentValue} (${formatTime(timestamp)})`);
+                    console.log(`[Watch #${id}] ${parsedAddr} changed: ${prevValue} → ${currentValue} (${formatTime(timestamp)})`);
                     prevValue = currentValue;
                 }
             } catch (e) {
-                console.error(`Watch ${id} 오류: ${e.message}`);
+                console.error(`Watch ${id} error: ${e.message}`);
                 this.unwatch(id);
             }
         }, 100);
@@ -376,17 +369,17 @@ const mem = {
             createdAt: new Date()
         };
         
-        console.log(`메모리 감시 설정됨 #${id}: ${parsedAddr} (${type})`);
+        console.log(`Memory watch set #${id}: ${parsedAddr} (${type})`);
         return id;
     },
     
     /**
-     * 메모리 감시를 중지하고 변경 요약을 표시합니다.
-     * @param {number} id 감시 ID
+     * Stop watching a memory address and display change summary
+     * @param {number} id Watch ID
      */
     unwatch(id) {
         if (!watches[id]) {
-            console.error(`ID ${id}에 대한 감시를 찾을 수 없습니다.`);
+            console.error(`No watch found for ID ${id}`);
             return false;
         }
         
@@ -399,19 +392,19 @@ const mem = {
         
         const watch = watches[id];
         
-        console.log(`\n----- 메모리 감시 요약 #${id} -----`);
-        console.log(`주소: ${watch.address} (${watch.type})`);
-        console.log(`감시 시작: ${formatTime(watch.createdAt)}`);
-        console.log(`감시 종료: ${formatTime(new Date())}`);
-        console.log(`변경 횟수: ${watch.changes.length}`);
+        console.log(`\n----- Memory watch summary #${id} -----`);
+        console.log(`Address: ${watch.address} (${watch.type})`);
+        console.log(`Watch start: ${formatTime(watch.createdAt)}`);
+        console.log(`Watch end: ${formatTime(new Date())}`);
+        console.log(`Change count: ${watch.changes.length}`);
         
         if (watch.changes.length > 0) {
-            console.log('\n변경 기록:');
+            console.log('\nChange record:');
             watch.changes.forEach((change, index) => {
                 console.log(`${index + 1}. ${formatTime(change.timestamp)}: ${change.from} → ${change.to}`);
             });
         } else {
-            console.log('\n감시 기간 동안 값 변경이 없었습니다.');
+            console.log('\nNo value changes during watch period.');
         }
         
         console.log('\n-------------------------');
@@ -423,9 +416,9 @@ const mem = {
 };
 
 /**
- * 날짜를 포맷팅합니다.
- * @param {Date} date 날짜 객체
- * @returns {string} 포맷팅된 날짜 문자열
+ * Format a date
+ * @param {Date} date Date object
+ * @returns {string} Formatted date string
  */
 function formatTime(date) {
     return date.toLocaleTimeString('ko-KR', { 

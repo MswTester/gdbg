@@ -1,5 +1,5 @@
 /**
- * REPL 모듈의 메인 진입점
+ * Main entry point for the REPL module
  */
 
 const repl = require('repl');
@@ -8,44 +8,44 @@ const completer = require('./completer');
 const commands = require('./commands');
 
 /**
- * REPL 세션 시작
- * @param {any} session Frida 세션
- * @param {any} script 로드된 Frida 스크립트
+ * Start REPL session
+ * @param {any} session Frida session
+ * @param {any} script Loaded Frida script
  */
 function startRepl(session, script) {
-  // REPL 생성
+  // Create REPL
   const replServer = repl.start({
     prompt: 'gdbg> ',
     eval: commandEvaluator.createEvaluator(script)
   });
 
-  // 명령어 등록
+  // Register commands
   commands.registerCommands(replServer);
 
-  // 탭 완성 설정
+  // Set up tab completion
   completer.setupCompleter(replServer);
 
-  // 스크립트를 REPL 컨텍스트에 노출
+  // Expose script to REPL context
   replServer.context.script = script;
   replServer.context.session = session;
 
-  // 종료 이벤트 처리
+  // Handle exit event
   replServer.on('exit', () => {
-    console.log('REPL 세션을 종료합니다...');
+    console.log('Terminating GDBG session...');
     if (session) session.detach();
     process.exit(0);
   });
 
-  // 스크립트 관련 이벤트 처리
+  // Handle script-related events
   script.message.connect((message) => {
     if (message.type === 'error') {
-      console.error('스크립트 오류:', message.description);
+      console.error('Script error:', message.description);
     }
   });
   
-  // 스크립트가 종료되면 REPL도 종료
+  // Terminate REPL when script is terminated
   script.destroyed.connect(() => {
-    console.log('스크립트 세션이 종료되었습니다. REPL을 종료합니다...');
+    console.log('Script session terminated. Exiting GDBG...');
     replServer.close();
     if (session) session.detach();
     process.exit(0);

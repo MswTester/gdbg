@@ -2,6 +2,27 @@
 
 GDBG is a powerful CLI tool for game debugging and memory analysis built on top of the Frida instrumentation toolkit. It provides an intuitive command-line interface for common Frida operations, making it easier to hook functions, scan memory, and manipulate game memory.
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+  - [Using Pre-built Binaries](#using-pre-built-binaries)
+  - [Building from Source](#building-from-source)
+- [Getting Started](#getting-started)
+  - [Basic Usage](#basic-usage)
+  - [Command Examples](#command-examples)
+- [Documentation](#documentation)
+  - [Basic Commands](#basic-commands)
+  - [Hook Commands](#hook-commands)
+  - [Memory Commands](#memory-commands)
+  - [Search Commands](#search-commands)
+  - [History & Comparison](#history--comparison)
+  - [Utility Commands](#utility-commands)
+- [Architecture](#architecture)
+  - [Modular Structure](#modular-structure)
+  - [Development Guide](#development-guide)
+- [License](#license)
+
 ## Features
 
 - Java class/method exploration
@@ -57,7 +78,7 @@ npm run build-linux  # Linux
 
 The binaries will be generated in the `dist` directory.
 
-## Usage
+## Getting Started
 
 ### Basic Usage
 
@@ -95,7 +116,7 @@ mem lock 0 100 int
 
 Type `help` to see all available commands.
 
-## Command Reference
+## Documentation
 
 ### Basic Commands
 
@@ -119,71 +140,92 @@ Type `help` to see all available commands.
 - `mem view <index> [lines] [type]` - View memory in hex+type format
 - `mem lock <index> <value> [type]` - Lock memory value
 - `mem unlock <index>` - Unlock memory value
+- `mem list` - List all locked memory addresses
 
 ### Search Commands
 
 - `search <value> [type] [prot]` - Scan memory
 - `exact <value> [type]` - Filter results by exact value
 - `grep <pattern>` - Filter results by regex
+- `next` - Continue search with next matches
+- `prev` - Go back to previous matches
 
-## License
+### History & Comparison
 
-MIT License
+- `history save [name]` - Save current search results
+- `history load <name>` - Load saved search results
+- `history list` - List all saved search results
+- `history diff <name1> <name2>` - Compare two saved results
+- `history delete <name>` - Delete saved search results
 
-## 모듈화 구조
+### Utility Commands
 
-gdbg는 이제 두 가지 주요 부분으로 모듈화되었습니다:
+- `call <index> [args...]` - Call a function
+- `eval <code>` - Evaluate JavaScript code in process context
+- `library load <path>` - Load a script library
+- `clear` - Clear the console
+- `exit` - Exit GDBG
 
-1. CLI 모듈 (`src/cli`, `src/commands`, `src/repl`, `src/utils`)
-   - CLI 명령어 및 REPL 기능을 담당
+## Architecture
 
-2. Frida 에이전트 모듈 (`src/frida`)
-   - frida-compile을 사용하여 모듈화된 Frida 스크립트
-   - 모든 메모리 조작 및 후킹 기능 포함
+### Modular Structure
 
-### 개발 방법
+GDBG is now modularized into two main components:
 
-스크립트를 수정한 후에는 다음 명령어로 컴파일해야 합니다:
+1. CLI Module (`src/cli`, `src/commands`, `src/repl`, `src/utils`)
+   - Handles CLI commands and REPL functionality
+
+2. Frida Agent Module (`src/frida`)
+   - Modularized Frida scripts using frida-compile
+   - Contains all memory manipulation and hooking functionality
+
+### Development Guide
+
+After modifying scripts, you need to compile them using:
 
 ```bash
 npm run compile-agent
 ```
 
-이 명령어는 `frida-agent.js`와 모든 관련 모듈을 `gdbg.js`로 컴파일합니다.
+This command compiles `frida-agent.js` and all related modules into `gdbg.js`.
 
-### 모듈 구조
+#### Module Structure
 
 ```
 src/
-├── cli/            # CLI 메인 모듈
+├── cli/              # CLI main module
 │   ├── index.js
 │   └── version.js
-├── commands/       # CLI 명령어
+├── commands/         # CLI commands
 │   ├── frida.js
 │   ├── index.js
 │   └── repl.js
-├── repl/           # REPL 기능
+├── repl/             # REPL functionality
 │   ├── commands.js
 │   ├── completer.js
 │   ├── evaluator.js
 │   └── index.js
-├── utils/          # 공통 유틸리티
+├── utils/            # Common utilities
 │   └── index.js
-└── frida/          # Frida 에이전트 모듈
-    ├── index.js    # 메인 진입점
-    ├── config.js   # 설정
-    ├── state.js    # 전역 상태
-    ├── utils.js    # 유틸리티
-    ├── logger.js   # 로깅
-    ├── memory.js   # 메모리 유틸리티
-    ├── help.js     # 도움말
-    ├── list.js     # 목록 기능
-    ├── hook.js     # 후킹 기능
-    ├── call.js     # 함수 호출
-    ├── scan.js     # 메모리 스캔
-    ├── mem.js      # 메모리 조작
-    ├── history.js  # 히스토리 관리
-    ├── library.js  # 라이브러리 관리
-    ├── cmd.js      # 명령어 관리
-    └── navigation.js # 탐색 기능
+└── frida/            # Frida agent module
+    ├── index.js      # Main entry point
+    ├── config.js     # Configuration
+    ├── state.js      # Global state
+    ├── utils.js      # Utilities
+    ├── logger.js     # Logging
+    ├── memory.js     # Memory utilities
+    ├── help.js       # Help system
+    ├── list.js       # Listing functionality
+    ├── hook.js       # Hooking functionality
+    ├── call.js       # Function calling
+    ├── scan.js       # Memory scanning
+    ├── mem.js        # Memory manipulation
+    ├── history.js    # History management
+    ├── library.js    # Library management
+    ├── cmd.js        # Command management
+    └── navigation.js # Navigation functionality
 ``` 
+
+## License
+
+MIT License 

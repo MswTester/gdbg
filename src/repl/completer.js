@@ -1,51 +1,51 @@
 /**
- * REPL 명령어 자동완성 모듈
+ * REPL command auto-completion module
  */
 
 /**
- * 탭 자동완성 설정
- * @param {import('repl').REPLServer} replServer REPL 서버 인스턴스
+ * Setup tab completion
+ * @param {import('repl').REPLServer} replServer REPL server instance
  */
 function setupCompleter(replServer) {
-  // 기본 명령어 목록
+  // Basic command list
   const commands = [
-    'help',
-    'list',
-    'hook',
-    'scan',
-    'trace',
-    'find',
-    'memory',
-    'exit'
+    'help', 'list', 'mem', 'scan', 'hook',
+    'call', 'hist', 'lib', 'cmd', 'nxt',
+    'prv', 'grep', 'sav', 'sort', 'exit'
   ];
-
-  // 목록 하위 명령어
-  const listSubcommands = [
-    'class',
-    'method',
-    'module',
-    'export'
-  ];
-
-  // 명령어 자동완성 설정
+  
+  // List sub-commands
+  const subCommands = {
+    'list': ['class', 'method', 'module', 'export'],
+    'mem': ['read', 'write', 'view', 'lock', 'unlock', 'list', 'trace', 'untrace', 'watch', 'unwatch'],
+    'scan': ['type', 'value', 'range', 'increased', 'decreased', 'unchanged', 'changed'],
+    'hook': ['method', 'native', 'list', 'unhook'],
+    'hist': ['save', 'list', 'load', 'clear', 'compare'],
+    'lib': ['list', 'save', 'clear', 'remove', 'move', 'sort', 'find', 'export', 'duplicate']
+  };
+  
+  // Set up command completion
   replServer.completer = function(line) {
-    const parts = line.trim().split(' ');
+    const lineWords = line.split(' ');
     
-    // 첫 번째 단어 자동완성 (기본 명령어)
-    if (parts.length === 1) {
-      const completions = commands.filter(c => c.startsWith(parts[0]));
-      return [completions, parts[0]];
+    // First word completion (basic commands)
+    if (lineWords.length === 1) {
+      const completions = commands.filter(c => c.startsWith(lineWords[0]));
+      return [completions.length ? completions : commands, lineWords[0]];
     }
     
-    // 두 번째 단어 자동완성 (하위 명령어)
-    if (parts.length === 2) {
-      if (parts[0] === 'list') {
-        const completions = listSubcommands.filter(c => c.startsWith(parts[1]));
-        return [completions, parts[1]];
+    // Second word completion (sub-commands)
+    if (lineWords.length === 2) {
+      const cmd = lineWords[0];
+      const sub = lineWords[1];
+      
+      if (subCommands[cmd]) {
+        const completions = subCommands[cmd].filter(c => c.startsWith(sub));
+        return [completions.length ? completions : subCommands[cmd], sub];
       }
     }
     
-    // 기타 자동완성은 현재 지원하지 않음
+    // Other completions are not currently supported
     return [[], line];
   };
 }

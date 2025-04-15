@@ -1,31 +1,44 @@
 /**
- * 후킹 관련 기능 모듈
+ * Hooking functionality module
  */
 
-const utils = require('./utils');
 const log = require('./logger');
+const utils = require('./utils');
 
 const hook = {
     method(i) {
-        const { class: c, method: m } = global.state.logs[i]?.value || {};
-        if (!c || !m) return log.error(`hook.method(): 유효하지 않은 메소드 @ ${i}`);
+        const m = utils.resolve(i, 'method');
+        if (!m || !m.class || !m.method) return log.error(`hook.method(): Invalid method @ ${i}`);
+        const c = m.class, method = m.method;
         
-        Java.perform(() => {
-            try {
-                log.info(`${c}.${m} 후킹 중...`);
-                // 실제 후킹 코드는 생략
-                log.info("구현 필요: 메소드 후킹");
-            } catch (e) {
-                log.error(`hook.method(): ${e}`);
-            }
-        });
+        log.info(`Hooking ${c}.${method}...`);
+        // Actual hooking code is omitted
+        log.info("Implementation needed: Method hooking");
+        
+        return 0;
     },
-
-    // 추가 후킹 관련 기능들은 정리를 위해 생략
-    native() { log.info("구현 필요: native()"); },
-    list() { log.info("구현 필요: list()"); },
-    unhook() { log.info("구현 필요: unhook()"); },
-    unhookAll() { log.info("구현 필요: unhookAll()"); }
+    
+    native(i) {
+        // Additional hooking-related functions are omitted for clarity
+        log.info(`Hooking native function @ ${i}...`);
+        log.info("Implementation needed: Native function hooking");
+        
+        return 0;
+    },
+    
+    unhook(i) {
+        log.info(`Unhooking hook #${i}...`);
+        log.info("Implementation needed: Unhooking");
+        
+        return true;
+    },
+    
+    list() {
+        log.info("Listing active hooks...");
+        log.info("Implementation needed: Listing hooks");
+        
+        return [];
+    }
 };
 
 module.exports = hook; 

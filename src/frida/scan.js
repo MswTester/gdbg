@@ -5,111 +5,132 @@
 const utils = require('./utils');
 const log = require('./logger');
 const config = require('./config');
+const memory = require('./memory');
+const list = require('./list');
 
 const scan = {
     /**
-     * 메모리에서 지정된 유형과 값으로 스캔
-     * @param {any} val 검색할 값
-     * @param {string} t 검색할 데이터 유형
-     * @param {string} p 메모리 보호 유형
+     * Scan memory for a specified type and value
+     * @param {any} val Value to search for
+     * @param {string} t Data type to search
+     * @param {string} p Memory protection type
+     * @returns {Array} Array of found addresses
      */
     type(val, t = config.defaultScanType, p = 'r-x') {
+        t = t || config.defaultScanType;
+        p = p || 'r-x';
         global.state.logs.length = 0;
         global.state.lastScanType = t;
         let idx = 0, count = 0;
         try {
-            // 값 유형 검사 및 로깅
-            const valueType = typeof val;
-            log.info(`Scanning memory (type: ${t}, value: ${val} [${valueType}], prot: ${p})...`);
+            // Validate value type and log
+            const type = t.toLowerCase();
+            log.info(`Scanning for ${val} (type: ${type}, protection: ${p})`);
             
-            // 패턴 생성
-            const pattern = utils.toPattern(t, val);
+            // Create pattern
+            const pattern = utils.valueToPattern(val, type);
             if (!pattern) {
-                log.error(`Failed to create search pattern for value '${val}' with type '${t}'`);
-                return;
+                return log.error('Invalid value or type for pattern generation');
             }
             
-            // 메모리 스캔 수행
-            Process.enumerateRanges({ protection: p }).forEach(r => {
-                try {
-                    Memory.scanSync(r.base, r.size, pattern).forEach(res => {
-                        global.state.logs.push({
-                            index: idx++,
-                            label: `${utils.formatAddress(res.address)} (${t})`,
-                            value: { address: res.address, type: t },
-                            type: 'ptr'
-                        });
-                        count++;
-                    });
-                } catch (e) {
-                    log.warning(`Error scanning range ${utils.formatAddress(r.base)}: ${e.message}`);
-                }
-            });
+            // Perform memory scan
+            const ranges = Process.enumerateRangesSync({protection: p});
+            log.info(`Scanning ${ranges.length} memory ranges...`);
             
-            log.success(`Scan complete: found ${count} results`);
-            global.nxt(0);
+            const results = [];
+            for (const range of ranges) {
+                try {
+                    const matches = Memory.scanSync(range.base, range.size, pattern);
+                    if (matches.length > 0) {
+                        for (const match of matches) {
+                            results.push({
+                                address: match.address,
+                                value: val,
+                                type: type
+                            });
+                        }
+                    }
+                } catch (e) {
+                    // Skip ranges that can't be read
+                }
+            }
+            
+            log.success(`Search completed: found ${results.length} results`);
+            global.state.lastSearch = results;
+            global.state.searchHistory.push(results);
+            return results;
         } catch (e) {
-            log.error(`scan.type(): ${e}`);
+            log.error(`Scan error: ${e.message}`);
+            return [];
         }
     },
 
     /**
-     * 이전 스캔 결과에서 조건에 맞는 값 필터링
-     * @param {Function} cond 필터링 조건 함수
-     * @param {string} t 데이터 유형
+     * Filter previous scan results with a condition
+     * @param {Function} cond Filtering condition function
+     * @param {string} t Data type
+     * @returns {Array} Filtered results
      */
     next(cond, t = global.state.lastScanType) {
-        if (!global.state.logs.length) return log.error('scan.next(): No previous scan results');
+        if (!global.state.lastSearch || global.state.lastSearch.length === 0) {
+            log.error('No previous search results to filter');
+            return [];
+        }
         
-        const snapshot = global.state.logs.map(x => x.value.address);
-        global.state.logs.length = 0;
-        let idx = 0, count = 0;
-        
-        log.info(`Filtering ${snapshot.length} addresses with condition...`);
-        
-        const memory = require('./memory');
-        snapshot.forEach(ptr => {
-            try {
-                const val = memory.reader[t](ptr);
-                if (cond(val)) {
-                    global.state.logs.push({
-                        index: idx++,
-                        label: `${utils.formatAddress(ptr)} (${t}) = ${val}`,
-                        value: { address: ptr, type: t },
-                        type: 'ptr'
-                    });
-                    count++;
+        try {
+            const memory = require('./memory');
+            const results = [];
+            const type = t.toLowerCase();
+            
+            for (const result of global.state.lastSearch) {
+                try {
+                    const currentValue = memory.reader[type](result.address);
+                    if (cond(currentValue, result.value)) {
+                        results.push({
+                            address: result.address,
+                            value: currentValue,
+                            type: type
+                        });
+                    }
+                } catch (e) {
+                    // Skip addresses that can't be read
                 }
-            } catch (_) {}
-        });
-        
-        global.state.lastScanType = t;
-        log.success(`Filter complete: found ${count} results`);
-        global.nxt(0);
+            }
+            
+            log.success(`Filter completed: ${results.length} results from ${global.state.lastSearch.length} previous results`);
+            global.state.lastSearch = results;
+            global.state.searchHistory.push(results);
+            return results;
+        } catch (e) {
+            log.error(`Filter error: ${e.message}`);
+            return [];
+        }
     },
     
     /**
-     * 정확한 값 검색
-     * @param {any} val 검색할 값
-     * @param {string} t 데이터 유형
+     * Search for exact value
+     * @param {any} val Value to search for
+     * @param {string} t Data type
+     * @returns {Array} Search results
      */
-    value(val, t = global.state.lastScanType) {
-        // 문자열이 숫자로 변환 가능한지 확인
+    value(val, t = 'int') {
+        // Check if string can be converted to number
         if (typeof val === 'string' && !isNaN(Number(val))) {
             val = Number(val);
         }
         
-        this.next(v => v === val, t);
+        return this.next((currentVal) => currentVal === val, t);
     },
     
     /**
-     * 범위 내 값 검색
-     * @param {number} min 최소값
-     * @param {number} max 최대값
-     * @param {string} t 데이터 유형
+     * Search for values within a range
+     * @param {number} min Minimum value
+     * @param {number} max Maximum value
+     * @param {string} t Data type
+     * @returns {Array} Search results
      */
-    range(min, max, t = global.state.lastScanType) {
-        // 문자열이 숫자로 변환 가능한지 확인
+    range(min, max, t = 'int') {
+        // Check if string can be converted to number
         if (typeof min === 'string' && !isNaN(Number(min))) {
             min = Number(min);
         }
@@ -117,56 +138,65 @@ const scan = {
             max = Number(max);
         }
         
-        this.next(v => v >= min && v <= max, t);
+        return this.next((currentVal) => currentVal >= min && currentVal <= max, t);
     },
     
     /**
-     * 증가된 값 검색
-     * @param {string} t 데이터 유형
+     * Search for increased values
+     * @param {string} t Data type
+     * @returns {Array} Search results
      */
-    increased(t = global.state.lastScanType) {
-        if (!global.state.logs.some(l => l.hasOwnProperty('prevValue'))) {
-            // First snapshot
-            const memory = require('./memory');
-            global.state.logs.forEach((l, i) => {
-                try {
-                    l.prevValue = memory.reader[t](l.value.address);
-                } catch (_) {}
-            });
+    increased(t = 'int') {
+        if (!global.state.lastCompare) {
+            // First run - save current values
+            log.info('Taking snapshot of current values. Run command again after value increases.');
             
-            log.info('Snapshot saved for increased value search. Run scan.increased() again to find values that increased.');
-            return;
+            const memory = require('./memory');
+            const prevValues = {};
+            const results = global.state.lastSearch || [];
+            
+            for (const result of results) {
+                try {
+                    prevValues[result.address] = memory.reader[t](result.address);
+                } catch (e) {
+                    // Skip addresses that can't be read
+                }
+            }
+            
+            global.state.lastCompare = prevValues;
+            return results;
+        } else {
+            return this.next((currentVal, prevVal) => currentVal > global.state.lastCompare[prevVal.address], t);
         }
-        
-        this.next(function(v) {
-            const idx = global.state.logs.findIndex(l => 
-                l.value.address.equals(this.address) && l.hasOwnProperty('prevValue'));
-            return idx >= 0 && v > global.state.logs[idx].prevValue;
-        }, t);
     },
     
     /**
-     * 감소된 값 검색
-     * @param {string} t 데이터 유형
+     * Search for decreased values
+     * @param {string} t Data type
+     * @returns {Array} Search results
      */
-    decreased(t = global.state.lastScanType) {
-        if (!global.state.logs.some(l => l.hasOwnProperty('prevValue'))) {
-            const memory = require('./memory');
-            global.state.logs.forEach((l, i) => {
-                try {
-                    l.prevValue = memory.reader[t](l.value.address);
-                } catch (_) {}
-            });
+    decreased(t = 'int') {
+        if (!global.state.lastCompare) {
+            // First run - save current values
+            log.info('Taking snapshot of current values. Run command again after value decreases.');
             
-            log.info('Snapshot saved for decreased value search. Run scan.decreased() again to find values that decreased.');
-            return;
+            const memory = require('./memory');
+            const prevValues = {};
+            const results = global.state.lastSearch || [];
+            
+            for (const result of results) {
+                try {
+                    prevValues[result.address] = memory.reader[t](result.address);
+                } catch (e) {
+                    // Skip addresses that can't be read
+                }
+            }
+            
+            global.state.lastCompare = prevValues;
+            return results;
+        } else {
+            return this.next((currentVal, prevVal) => currentVal < global.state.lastCompare[prevVal.address], t);
         }
-        
-        this.next(function(v) {
-            const idx = global.state.logs.findIndex(l => 
-                l.value.address.equals(this.address) && l.hasOwnProperty('prevValue'));
-            return idx >= 0 && v < global.state.logs[idx].prevValue;
-        }, t);
     }
 };
 

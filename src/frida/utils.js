@@ -1,5 +1,5 @@
 /**
- * Utilities module
+ * Utility functions for GDBG
  */
 
 const config = require('./config');
@@ -7,13 +7,13 @@ const log = require('./logger');
 
 const utils = {
     /**
-     * Format address to hex string
-     * @param {NativePointer} address 
-     * @returns {string}
+     * Format address value
+     * @param {any} addr Address value
+     * @returns {string} Formatted address string
      */
-    formatAddress(address) {
-        if (!address) return 'null';
-        return address.toString();
+    formatAddress(addr) {
+        if (!addr) return 'null';
+        return addr.toString();
     },
 
     /**
@@ -57,233 +57,216 @@ const utils = {
     },
 
     /**
-     * Convert value to binary pattern for memory scanning
-     * @param {string} type - Data type
-     * @param {any} value - Value to convert
-     * @returns {string} Hex pattern string
+     * Convert value to pattern for memory scanning
      */
-    toPattern(type, value) {
-        try {
-            // 타입 소문자로 변환
-            const t = (type || 'uint').toLowerCase();
-            
-            // 값 유형 확인 및 변환
-            let v = value;
-            if (typeof v === 'string' && t !== 'string' && t !== 'utf8' && t !== 'utf16') {
-                // 문자열을 숫자로 변환 시도
-                if (!isNaN(parseFloat(v))) {
-                    v = parseFloat(v);
-                    // 정수 타입에서는 소수점 자르기
-                    if (['int', 'uint', 'short', 'ushort', 'byte', 'int8', 'int16', 'int32', 'uint8', 'uint16', 'uint32'].includes(t)) {
-                        v = Math.floor(v);
-                    }
-                } else {
-                    log.error(`Invalid value '${v}' for type '${t}'`);
-                    return null;
-                }
+    valueToPattern(val, type) {
+        // Convert type to lowercase
+        type = type.toLowerCase();
+        
+        // Check value type and convert if needed
+        let value = val;
+        
+        // Try to convert string to number
+        if (typeof value === 'string' && !isNaN(parseFloat(value))) {
+            value = parseFloat(value);
+            // For integer types, truncate decimal part
+            if (type.includes('int') || type === 'uint' || type === 'int') {
+                value = Math.floor(value);
             }
+        }
+        
+        let pattern;
+        
+        try {
+            // Create search pattern
+            const memory = require('./memory');
+            const littleEndian = true; // Most systems are little endian
             
-            // 검색 패턴 생성
-            let buffer;
-            const littleEndian = true; // 대부분의 시스템은 리틀 엔디안
-            
-            switch (t) {
+            switch (type) {
                 case 'byte':
-                    if (typeof v !== 'number' || v < 0 || v > 255) {
-                        log.error(`Byte value must be a number between 0 and 255: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(1);
-                    new DataView(buffer).setUint8(0, v);
+                case 'int8':
+                    pattern = value.toString(16).padStart(2, '0');
                     break;
                     
                 case 'short':
-                    if (typeof v !== 'number') {
-                        log.error(`Short value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(2);
-                    new DataView(buffer).setInt16(0, v, littleEndian);
-                    break;
-                    
-                case 'ushort':
-                    if (typeof v !== 'number') {
-                        log.error(`Unsigned short value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(2);
-                    new DataView(buffer).setUint16(0, v, littleEndian);
+                case 'int16':
+                    const shortBuf = new ArrayBuffer(2);
+                    new DataView(shortBuf).setInt16(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(shortBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
                     break;
                     
                 case 'int':
-                    if (typeof v !== 'number') {
-                        log.error(`Int value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(4);
-                    new DataView(buffer).setInt32(0, v, littleEndian);
-                    break;
-                    
-                case 'uint':
-                    if (typeof v !== 'number') {
-                        log.error(`Unsigned int value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(4);
-                    new DataView(buffer).setUint32(0, v, littleEndian);
+                case 'int32':
+                    const intBuf = new ArrayBuffer(4);
+                    new DataView(intBuf).setInt32(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(intBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
                     break;
                     
                 case 'float':
-                    if (typeof v !== 'number') {
-                        log.error(`Float value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(4);
-                    new DataView(buffer).setFloat32(0, v, littleEndian);
+                    const floatBuf = new ArrayBuffer(4);
+                    new DataView(floatBuf).setFloat32(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(floatBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
                     break;
                     
                 case 'double':
-                    if (typeof v !== 'number') {
-                        log.error(`Double value must be a number: ${v}`);
-                        return null;
-                    }
-                    buffer = new ArrayBuffer(8);
-                    new DataView(buffer).setFloat64(0, v, littleEndian);
+                    const doubleBuf = new ArrayBuffer(8);
+                    new DataView(doubleBuf).setFloat64(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(doubleBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    break;
+                    
+                case 'uint':
+                case 'uint32':
+                    const uintBuf = new ArrayBuffer(4);
+                    new DataView(uintBuf).setUint32(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(uintBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    break;
+                    
+                case 'uint8':
+                    pattern = (value & 0xFF).toString(16).padStart(2, '0');
+                    break;
+                    
+                case 'uint16':
+                    const uint16Buf = new ArrayBuffer(2);
+                    new DataView(uint16Buf).setUint16(0, value, littleEndian);
+                    pattern = Array.from(new Uint8Array(uint16Buf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    break;
+                    
+                case 'int64':
+                case 'uint64':
+                case 'long':
+                    // This is approximation for 64-bit values
+                    const longBuf = new ArrayBuffer(8);
+                    const longView = new DataView(longBuf);
+                    // Split into two 32-bit values
+                    const low32 = value & 0xFFFFFFFF;
+                    const high32 = Math.floor(value / 0x100000000);
+                    longView.setUint32(0, low32, littleEndian);
+                    longView.setUint32(4, high32, littleEndian);
+                    pattern = Array.from(new Uint8Array(longBuf))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
                     break;
                     
                 case 'string':
+                case 'ascii':
                 case 'utf8':
-                    if (typeof v !== 'string') {
-                        log.error(`String value must be a string: ${v}`);
-                        return null;
-                    }
-                    
-                    let bytes = [];
-                    for (let i = 0; i < v.length; i++) {
-                        const code = v.charCodeAt(i);
-                        if (code < 128) {
-                            bytes.push(code);
-                        } else if (code < 2048) {
-                            bytes.push(192 | (code >> 6), 128 | (code & 63));
-                        } else if (code < 65536) {
-                            bytes.push(224 | (code >> 12), 128 | ((code >> 6) & 63), 128 | (code & 63));
-                        } else {
-                            bytes.push(
-                                240 | (code >> 18),
-                                128 | ((code >> 12) & 63),
-                                128 | ((code >> 6) & 63),
-                                128 | (code & 63)
-                            );
+                    // Use hex string pattern directly
+                    if (typeof value === 'string') {
+                        if (value.startsWith('0x')) {
+                            // Remove 0x prefix
+                            value = value.substring(2);
                         }
+                        
+                        // Remove spaces and special characters
+                        value = value.replace(/[^0-9a-fA-F]/g, '');
+                        
+                        if (value.length % 2 !== 0) {
+                            value = value + '0';  // Pad if odd length
+                        }
+                        
+                        // Split into XX XX XX format
+                        pattern = value.match(/.{2}/g).join(' ');
+                    } else {
+                        // Convert non-string to string
+                        const str = String(value);
+                        pattern = Array.from(str)
+                            .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+                            .join(' ');
                     }
-                    buffer = new Uint8Array(bytes).buffer;
                     break;
                     
                 case 'hex':
-                case 'bytes':
-                    // 16진수 문자열 패턴을 직접 사용
-                    if (typeof v !== 'string') {
-                        log.error(`Hex pattern must be a string: ${v}`);
+                    // Convert ArrayBuffer to hex string
+                    if (value instanceof ArrayBuffer) {
+                        pattern = Array.from(new Uint8Array(value))
+                            .map(b => b.toString(16).padStart(2, '0'))
+                            .join(' ');
+                    } else if (typeof value === 'string') {
+                        // Assume it's already a hex string, just format it
+                        // Remove 0x prefix if exists
+                        if (value.startsWith('0x')) {
+                            value = value.substring(2);
+                        }
+                        
+                        // Remove spaces and non-hex chars
+                        value = value.replace(/[^0-9a-fA-F]/g, '');
+                        
+                        if (value.length % 2 !== 0) {
+                            value = value + '0';  // Pad if odd length
+                        }
+                        
+                        // Split into pairs
+                        pattern = value.match(/.{2}/g).join(' ');
+                    } else {
+                        log.error(`Can't convert ${typeof value} to hex pattern`);
                         return null;
                     }
-                    
-                    // 공백과 특수 문자 제거
-                    const hexPattern = v.replace(/[^0-9a-fA-F?]/g, '');
-                    if (hexPattern.length % 2 !== 0) {
-                        log.error('Hex pattern must have an even length');
-                        return null;
-                    }
-                    
-                    // 2자리씩 공백으로 분리 (XX XX XX 형식)
-                    let formattedPattern = '';
-                    for (let i = 0; i < hexPattern.length; i += 2) {
-                        formattedPattern += hexPattern.substr(i, 2) + ' ';
-                    }
-                    return formattedPattern.trim();
-                    
+                    break;
+                
                 default:
-                    log.error(`Unsupported type for pattern generation: ${t}`);
+                    log.error(`Unsupported type: ${type}`);
                     return null;
             }
             
-            // ArrayBuffer를 16진수 문자열로 변환
-            const bytes = new Uint8Array(buffer);
-            return Array.from(bytes)
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join(' ');
-                
+            return pattern;
         } catch (e) {
-            log.error(`toPattern error for type ${type}, value ${value}: ${e.message}`);
+            log.error(`Failed to create pattern: ${e.message}`);
             return null;
         }
     },
 
     /**
-     * Resolve identifier to address
-     * @param {string|number} id 
-     * @param {string} type 
-     * @returns {any} resolved value
+     * Resolve a pointer from various inputs
+     * @param {string|number|object} i Input value (index, address, or object)
+     * @param {string} t Expected type
+     * @returns {any} Resolved object or address
      */
-    resolve(id, type = 'address') {
-        try {
-            if (typeof id === 'object') {
-                if (id.handle) return id; // Java object
-                if (type === 'class' && id.class) return id.class;
-                if (type === 'method' && id.class && id.method) return id;
-                if (type === 'module' && id.name) return id;
-                if (type === 'func' && id.address) return id;
-                return null;
+    resolve(i, t) {
+        // Special case for ptr type
+        if (t === 'ptr') {
+            // Try to resolve from global.state.logs
+            if (!isNaN(parseInt(i)) && global.state.logs[i]) {
+                return global.state.logs[i].value;
             }
-
-            if (typeof id === 'number') {
-                if (type === 'address') return ptr(id);
-                if (type === 'index') return global.state.logs[id] || null;
-            }
-
-            // Handle string format
-            if (typeof id === 'string') {
-                if (id.startsWith('0x')) return ptr(id);
-
-                // Try to parse as number
-                const n = parseInt(id);
-                if (!isNaN(n)) {
-                    if (type === 'address') return ptr(n);
-                    if (type === 'index') return global.state.logs[n] || null;
-                }
-
-                // Special identifiers
-                if (id === 'lib') {
-                    const libName = Process.getModuleByAddress(Process.currentThreadId())?.name;
-                    if (libName) return Process.getModuleByName(libName);
-                }
-            }
-
-            // Try to resolve from logs by index
-            const i = parseInt(id);
-            if (!isNaN(i) && i >= 0 && i < global.state.logs.length) {
-                const item = global.state.logs[i];
-                if (type === 'address' && item.value instanceof NativePointer) return item.value;
-                if (type === 'module' && item.type === 'module') return item.value;
-                if (type === 'class' && item.type === 'class') return item.value;
-                if (type === 'method' && item.type === 'method') return item.value;
-                if (type === 'func' && item.type === 'func') return item.value;
-                return item.value;
-            }
-
-            // As a last resort, try to find module by name
-            if (type === 'module') {
+            
+            // Try to parse as hex address
+            if (typeof i === 'string' && i.toLowerCase().startsWith('0x')) {
                 try {
-                    return Process.getModuleByName(id);
+                    return ptr(i);
                 } catch (e) {
+                    log.error(`Failed to parse address: ${i}`);
                     return null;
                 }
             }
-
-            return null;
-        } catch (e) {
-            log.error(`resolve(): ${e}`);
-            return null;
+            
+            // Try to use directly if it's already a pointer
+            if (i && typeof i === 'object' && i.toString().includes('0x')) {
+                return i;
+            }
+            
+            // Try to convert to string and then ptr
+            try {
+                return ptr(String(i));
+            } catch (e) {
+                log.error(`Failed to convert to pointer: ${i}`);
+                return null;
+            }
         }
+        
+        // For other types, use the value directly
+        return i;
     },
 
     /**

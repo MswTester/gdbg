@@ -1,48 +1,43 @@
 /**
- * 로깅 시스템 모듈
+ * Logging system module
  */
 
-const config = require('./config');
+const utils = require('./utils');
 
-// 로깅 시스템
+// Logging system
 const log = {
-    format(type, msg) {
-        const c = config.colors;
-        if (!c.enabled) return msg;
-        
-        switch (type) {
-            case 'info': return `${c.info}${msg}${c.reset}`;
-            case 'success': return `${c.success}${msg}${c.reset}`;
-            case 'error': return `${c.error}${msg}${c.reset}`;
-            case 'warning': return `${c.warning}${msg}${c.reset}`;
-            default: return msg;
-        }
+    debug(msg) {
+        console.log(`[DEBUG] ${msg}`);
     },
-
+    
     info(msg) {
-        console.log(this.format('info', `[i] ${msg}`));
+        console.log(`[INFO] ${msg}`);
     },
-
-    success(msg) {
-        console.log(this.format('success', `[+] ${msg}`));
-    },
-
-    error(msg) {
-        console.log(this.format('error', `[!] ${msg}`));
-    },
-
+    
     warning(msg) {
-        console.log(this.format('warning', `[*] ${msg}`));
+        console.log(`[WARN] ${msg}`);
     },
-
-    table(items, formatter) {
-        if (!items || !items.length) {
-            this.info('표시할 데이터가 없습니다');
+    
+    error(msg) {
+        console.error(`[ERROR] ${msg}`);
+    },
+    
+    success(msg) {
+        console.log(`[SUCCESS] ${msg}`);
+    },
+    
+    plain(msg) {
+        console.log(msg);
+    },
+    
+    dump(obj) {
+        if (!obj) {
+            this.info('No data to display');
             return;
         }
-
-        // 모든 환경을 위한 간소화된 출력
-        items.forEach((item, idx) => console.log(formatter(item, idx)));
+        
+        // Simplified output for all environments
+        console.log(JSON.stringify(obj, null, 2));
     }
 };
 

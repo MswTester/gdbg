@@ -1,19 +1,19 @@
 /**
- * 유틸리티 모듈
+ * Utility Module
  */
 
 /**
- * 시간 형식 가져오기
- * @returns {string} 현재 시간 문자열
+ * Get formatted time
+ * @returns {string} Current time string
  */
 function getTime() {
   return new Date().toTimeString().split(' ')[0];
 }
 
 /**
- * 주소값 형식화
- * @param {any} addr 주소값
- * @returns {string} 형식화된 주소 문자열
+ * Format address value
+ * @param {any} addr Address value
+ * @returns {string} Formatted address string
  */
 function formatAddress(addr) {
   if (!addr) return 'null';
@@ -21,10 +21,10 @@ function formatAddress(addr) {
 }
 
 /**
- * 문자열 잘라내기
- * @param {string} str 원본 문자열
- * @param {number} maxLength 최대 길이
- * @returns {string} 잘라낸 문자열
+ * Truncate string
+ * @param {string} str Original string
+ * @param {number} maxLength Maximum length
+ * @returns {string} Truncated string
  */
 function truncate(str, maxLength = 80) {
   if (!str) return '';
@@ -33,9 +33,9 @@ function truncate(str, maxLength = 80) {
 }
 
 /**
- * 크기 형식화
- * @param {number} size 바이트 단위 크기
- * @returns {string} 형식화된 크기 문자열
+ * Format size
+ * @param {number} size Size in bytes
+ * @returns {string} Formatted size string
  */
 function formatSize(size) {
   if (size < 1024) return `${size} B`;
