@@ -31,4 +31,4 @@ yarn-error.log
 
 # frida-compile build
 /_agent.js
-
+/gdbg.js
